@@ -1,0 +1,17 @@
+Experimento: /home/thiago.esterci/Repositories/immuno_supression/studies/varmode_validation/study_20260923T194623Z_97Pnvz/20260923T194624_317326Z_random_all_vars-time-series_lags3_folds2_seed42
+Treino: 314 linhas; teste: 115 linhas
+
+random_forest: 1 candidatos x 2 folds + refit
+Fitting 2 folds for each of 1 candidates, totalling 2 fits
+  RMSE CV: 11.2265; RMSE teste: 12.1980; calculando SHAP...
+
+Resultados no conjunto de teste:
+     rmse       mae        r2  mape_percent_nonzero  mape_excluded_zeros         model   cv_rmse  fit_seconds
+12.197965 10.038261 -1.458403             65.165552                    0 random_forest 11.226466     0.053162
+
+Gerando análise temporal por paciente...
+        model classification   id  observations      rmse    mae   bias  time_min  time_max
+random_forest           best 36.0          20.0  3.402207  2.887 -1.108     794.0    4396.0
+random_forest          worst 30.0          20.0 21.188458 20.927 20.927     794.0    4396.0
+
+Análise salva em: /home/thiago.esterci/Repositories/immuno_supression/studies/varmode_validation/study_20260923T194623Z_97Pnvz/20260923T194624_317326Z_random_all_vars-time-series_lags3_folds2_seed42/patient_temporal_analysis

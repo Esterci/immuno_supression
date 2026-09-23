@@ -1,0 +1,17 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Notebook checkpoints and local configuration
+.ipynb_checkpoints/
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Data and experiment outputs are intentionally versioned.

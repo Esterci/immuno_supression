@@ -1,0 +1,216 @@
+{
+  "status": "complete",
+  "started_at_utc": "20260922T214532_418770Z",
+  "config": {
+    "data": "/home/thiago.esterci/Repositories/immuno_supression/data/clean_processed.parquet",
+    "output_dir": "/home/thiago.esterci/Repositories/immuno_supression/studies/smoke/study_20260922T214523Z_rZOi6W",
+    "search": "random",
+    "lags": 3,
+    "folds": 2,
+    "n_iter": 1,
+    "seed": 42,
+    "n_jobs": 1,
+    "test_size": 0.2,
+    "normalization": "patient",
+    "models": [
+      "random_forest",
+      "gradient_boosting",
+      "adaboost"
+    ],
+    "shap_samples": 4,
+    "shap_background": 5,
+    "shap_permutations": 1,
+    "quick": true
+  },
+  "python": "3.13.2 (main, Feb  4 2025, 00:00:00) [GCC 14.2.1 20250110 (Red Hat 14.2.1-7)]",
+  "command": [
+    "/home/thiago.esterci/Repositories/immuno_supression/runners/run_ml_experiment.py",
+    "--search",
+    "random",
+    "--lags",
+    "3",
+    "--folds",
+    "2",
+    "--seed",
+    "42",
+    "--n-iter",
+    "1",
+    "--n-jobs",
+    "1",
+    "--output-dir",
+    "studies/smoke/study_20260922T214523Z_rZOi6W",
+    "--quick",
+    "--shap-samples",
+    "4",
+    "--shap-background",
+    "5",
+    "--shap-permutations",
+    "1"
+  ],
+  "versions": {
+    "numpy": "1.26.4",
+    "pandas": "2.2.1",
+    "scikit-learn": "1.6.1",
+    "matplotlib": "3.9.4",
+    "shap": "0.46.0",
+    "pyarrow": "16.1.0",
+    "joblib": "1.4.2"
+  },
+  "source_sha256": {
+    "methods/ml_models.py": "3b9f242373fa00168008961c1759b1b903b700c938819a59b67873d4e93d3f0e",
+    "utils/ml_reports.py": "e85f8ba3262ec753874ea1b662cb2df63865dee81cc6f3f88e5fd7144d3ee008",
+    "runners/run_ml_experiment.py": "4a146561411bb139844ffca0735d2a29e4965a31e04560762ed2af6c781d3601",
+    "shells/run_ml_experiments.sh": "11f598d782a71ef29b72132a5f5857b596c9d121491645f8fee5deda04c828a3",
+    "data_preparation.py": "65c7e453e787b8b88c59e673842fd7f7a7ea35921c0e03d0e3e13db81af99d61",
+    "transplant_ml.yml": "ef449906faf3827de28e855c55d39a5783e48e7b54733b197f330dcb6c11bfd6"
+  },
+  "input_sha256": "3297992b49f405ed5ac6a61a30e51abab74120bf615029cd72e85b556923c608",
+  "rows_before": 807,
+  "rows_after_lags": 726,
+  "patients_before": 27,
+  "patients_after_lags": 27,
+  "train_rows": 541,
+  "test_rows": 185,
+  "train_patients": 21,
+  "test_patients": 6,
+  "features": [
+    "tad",
+    "m155",
+    "age",
+    "sex",
+    "wgt",
+    "hgt",
+    "dty",
+    "gf",
+    "gfc",
+    "ifc",
+    "dage",
+    "cisq",
+    "dyl",
+    "oifc",
+    "cmv",
+    "bkv",
+    "dm",
+    "amt_tac",
+    "dv_tac",
+    "amt_map",
+    "dv_map",
+    "amt_tac_t0",
+    "amt_tac_t1",
+    "amt_tac_t2",
+    "amt_tac_t3",
+    "dv_tac_t0",
+    "dv_tac_t1",
+    "dv_tac_t2",
+    "dv_tac_t3",
+    "amt_map_t0",
+    "amt_map_t1",
+    "amt_map_t2",
+    "amt_map_t3",
+    "dv_map_t0",
+    "dv_map_t1",
+    "dv_map_t2",
+    "dv_map_t3"
+  ],
+  "target": "lym",
+  "protocol": "GroupShuffleSplit para teste; GroupKFold apenas no treino; refit no treino completo",
+  "preprocessing_note": "Normalização patient usa toda a série individual; t0 é o primeiro valor. As features correntes são mantidas. Estudo retrospectivo, sem garantia de previsão causal/futura.",
+  "metrics_weighting": "Por observação, não por paciente",
+  "models": {
+    "random_forest": {
+      "parameters": {
+        "n_estimators": [
+          5,
+          10
+        ]
+      },
+      "candidates": 1,
+      "best_params": {
+        "n_estimators": 10
+      },
+      "metrics": {
+        "rmse": 13.304472200750412,
+        "mae": 10.85654054054054,
+        "r2": -2.008073645706499,
+        "mape_percent_nonzero": 82.47478029005805,
+        "mape_excluded_zeros": 0,
+        "model": "random_forest",
+        "cv_rmse": 12.367785372522544,
+        "fit_seconds": 0.0816200110130012
+      },
+      "shap": {
+        "algorithm": "tree_interventional",
+        "samples": 4,
+        "background_samples": 5,
+        "background_source": "train",
+        "explained_source": "test",
+        "seed": 42,
+        "permutations": null
+      }
+    },
+    "gradient_boosting": {
+      "parameters": {
+        "n_estimators": [
+          5,
+          10
+        ]
+      },
+      "candidates": 1,
+      "best_params": {
+        "n_estimators": 10
+      },
+      "metrics": {
+        "rmse": 11.154926722145449,
+        "mae": 9.017011413151137,
+        "r2": -1.114592109501893,
+        "mape_percent_nonzero": 69.21958119285748,
+        "mape_excluded_zeros": 0,
+        "model": "gradient_boosting",
+        "cv_rmse": 11.100651383651385,
+        "fit_seconds": 0.05130136798834428
+      },
+      "shap": {
+        "algorithm": "tree_interventional",
+        "samples": 4,
+        "background_samples": 5,
+        "background_source": "train",
+        "explained_source": "test",
+        "seed": 42,
+        "permutations": null
+      }
+    },
+    "adaboost": {
+      "parameters": {
+        "n_estimators": [
+          5,
+          10
+        ]
+      },
+      "candidates": 1,
+      "best_params": {
+        "n_estimators": 10
+      },
+      "metrics": {
+        "rmse": 11.824397082753748,
+        "mae": 9.883082114983655,
+        "r2": -1.3760259261062018,
+        "mape_percent_nonzero": 73.65139417180087,
+        "mape_excluded_zeros": 0,
+        "model": "adaboost",
+        "cv_rmse": 10.071344517421082,
+        "fit_seconds": 0.05981479800539091
+      },
+      "shap": {
+        "algorithm": "permutation",
+        "samples": 4,
+        "background_samples": 5,
+        "background_source": "train",
+        "explained_source": "test",
+        "seed": 42,
+        "permutations": 1
+      }
+    }
+  },
+  "elapsed_seconds": 5.878625721030403,
+  "finished_at_utc": "2026-09-22T21:45:38.337312+00:00"
+}

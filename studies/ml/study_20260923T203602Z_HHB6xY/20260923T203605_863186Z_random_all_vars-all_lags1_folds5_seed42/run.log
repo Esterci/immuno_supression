@@ -1,0 +1,33 @@
+Experimento: /home/thiago.esterci/Repositories/immuno_supression/studies/ml/study_20260923T203602Z_HHB6xY/20260923T203605_863186Z_random_all_vars-all_lags1_folds5_seed42
+Treino: 312 linhas; teste: 103 linhas
+
+random_forest: 30 candidatos x 5 folds + refit
+Fitting 5 folds for each of 30 candidates, totalling 150 fits
+  R² CV: 0.7060; RMSE teste: 3.9633; calculando SHAP...
+PermutationExplainer explainer:  75%|#######5  | 75/100 [00:00<?, ?it/s]PermutationExplainer explainer:  77%|#######7  | 77/100 [00:10<00:01, 19.85it/s]PermutationExplainer explainer:  79%|#######9  | 79/100 [00:10<00:01, 12.93it/s]PermutationExplainer explainer:  81%|########1 | 81/100 [00:10<00:01, 11.70it/s]PermutationExplainer explainer:  83%|########2 | 83/100 [00:10<00:01, 11.19it/s]PermutationExplainer explainer:  85%|########5 | 85/100 [00:10<00:01, 10.33it/s]PermutationExplainer explainer:  87%|########7 | 87/100 [00:11<00:01,  9.90it/s]PermutationExplainer explainer:  89%|########9 | 89/100 [00:11<00:01, 10.04it/s]PermutationExplainer explainer:  91%|#########1| 91/100 [00:11<00:00, 10.23it/s]PermutationExplainer explainer:  93%|#########3| 93/100 [00:11<00:00, 10.45it/s]PermutationExplainer explainer:  95%|#########5| 95/100 [00:11<00:00, 10.44it/s]PermutationExplainer explainer:  97%|#########7| 97/100 [00:12<00:00, 10.19it/s]PermutationExplainer explainer:  99%|#########9| 99/100 [00:12<00:00, 10.23it/s]PermutationExplainer explainer: 101it [00:12, 10.34it/s]                        PermutationExplainer explainer: 101it [00:12,  2.09it/s]
+
+gradient_boosting: 30 candidatos x 5 folds + refit
+Fitting 5 folds for each of 30 candidates, totalling 150 fits
+  R² CV: 0.7247; RMSE teste: 3.9320; calculando SHAP...
+
+adaboost: 30 candidatos x 5 folds + refit
+Fitting 5 folds for each of 30 candidates, totalling 150 fits
+  R² CV: 0.7132; RMSE teste: 4.2256; calculando SHAP...
+PermutationExplainer explainer:  97%|#########7| 97/100 [00:00<?, ?it/s]PermutationExplainer explainer:  99%|#########9| 99/100 [00:10<00:00, 19.72it/s]PermutationExplainer explainer: 101it [00:10, 12.13it/s]                        PermutationExplainer explainer: 101it [00:10,  2.60s/it]
+
+Resultados no conjunto de teste:
+    rmse      mae       r2  mape_percent_nonzero  mape_excluded_zeros             model    cv_r2  fit_seconds
+3.963285 2.267292 0.761713             12.722971                    0     random_forest 0.705973    10.947965
+3.931965 2.296605 0.765465             13.924406                    0 gradient_boosting 0.724695     4.350572
+4.225622 2.705788 0.729124             16.001205                    0          adaboost 0.713204     6.660363
+
+Gerando análise temporal por paciente...
+            model classification   id  observations     rmse      mae      bias  time_min  time_max
+    random_forest           best 44.0          11.0 0.603715 0.488783  0.076719    1560.0   4415.95
+    random_forest          worst 33.0          16.0 5.950873 3.340856  1.583467     961.5   2484.00
+gradient_boosting           best 44.0          11.0 0.930262 0.921848  0.788764    1560.0   4415.95
+gradient_boosting          worst 33.0          16.0 5.910238 3.201569 -1.063678     961.5   2484.00
+         adaboost           best 36.0          18.0 1.266771 1.038673 -0.624229     792.0   4391.95
+         adaboost          worst 33.0          16.0 6.108862 2.869453 -0.137176     961.5   2484.00
+
+Análise salva em: /home/thiago.esterci/Repositories/immuno_supression/studies/ml/study_20260923T203602Z_HHB6xY/20260923T203605_863186Z_random_all_vars-all_lags1_folds5_seed42/patient_temporal_analysis

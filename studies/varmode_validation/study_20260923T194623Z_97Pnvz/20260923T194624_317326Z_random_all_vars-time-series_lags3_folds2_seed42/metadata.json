@@ -1,0 +1,164 @@
+{
+  "status": "complete",
+  "started_at_utc": "20260923T194624_317326Z",
+  "config": {
+    "data": "/home/thiago.esterci/Repositories/immuno_supression/data/clean_processed.parquet",
+    "output_dir": "/home/thiago.esterci/Repositories/immuno_supression/studies/varmode_validation/study_20260923T194623Z_97Pnvz",
+    "search": "random",
+    "lags": 3,
+    "folds": 2,
+    "n_iter": 1,
+    "seed": 42,
+    "n_jobs": 1,
+    "test_size": 0.2,
+    "normalization": "all",
+    "var_mode": "time-series",
+    "models": [
+      "random_forest"
+    ],
+    "shap_samples": 2,
+    "shap_background": 3,
+    "shap_permutations": 1,
+    "quick": true
+  },
+  "python": "3.11.16 (main, Sep  2 2026, 23:39:52) [GCC 15.3.0]",
+  "python_executable": "/home/thiago.esterci/.conda/envs/transplant_ml/bin/python",
+  "command": [
+    "/home/thiago.esterci/Repositories/immuno_supression/runners/run_ml_experiment.py",
+    "--search",
+    "random",
+    "--lags",
+    "3",
+    "--folds",
+    "2",
+    "--seed",
+    "42",
+    "--var-mode",
+    "time-series",
+    "--n-iter",
+    "1",
+    "--n-jobs",
+    "1",
+    "--output-dir",
+    "studies/varmode_validation/study_20260923T194623Z_97Pnvz",
+    "--quick",
+    "--models",
+    "random_forest",
+    "--shap-samples",
+    "2",
+    "--shap-background",
+    "3",
+    "--shap-permutations",
+    "1"
+  ],
+  "versions": {
+    "numpy": "2.4.6",
+    "pandas": "3.0.6",
+    "scikit-learn": "1.9.1",
+    "matplotlib": "3.11.2",
+    "shap": "0.51.0",
+    "pyarrow": "25.0.0",
+    "joblib": "1.6.0"
+  },
+  "source_sha256": {
+    "methods/ml_models.py": "db15f1abe0fcc7f17655f317b3e6d25acc60aee3346a3e63c88e91470b2c8b70",
+    "utils/ml_reports.py": "2597012c122a90dcea64909e5b59554b4e34029b80ad3923a9832f5940fc862f",
+    "utils/analyze_patient_timeseries.py": "14235c1f8d3e704ad2ac49127bd19d5963be85b2de41a91f45b728ccedb4cd47",
+    "runners/run_ml_experiment.py": "aad929675e6031a73be1fe9b01ed84640fd3d2810ed95b18d0076714d8cca43c",
+    "shells/run_ml_experiments.sh": "c0d718de7e571fa201b9b1cbcfe383a0475f9d40fc066a18ca3678dd867f42da",
+    "data_preparation.py": "d74a1b2ab6054ec722c61716a4e6f852fa6e5be2ba0f46d1b8b44266e6bf40e9",
+    "transplant_ml.yml": "ef449906faf3827de28e855c55d39a5783e48e7b54733b197f330dcb6c11bfd6"
+  },
+  "input_sha256": "8c64e011b8c965bb6756729cb39140d7f45e8f0a178e9e3826cd9c7e62e0a8aa",
+  "rows_before": 510,
+  "rows_after_lags": 429,
+  "patients_before": 27,
+  "missing_before": 1,
+  "missing_features": 0,
+  "patients_after_lags": 27,
+  "train_rows": 314,
+  "test_rows": 115,
+  "train_patients": 21,
+  "test_patients": 6,
+  "features": [
+    "amt_tac",
+    "dv_tac",
+    "amt_map",
+    "dv_map",
+    "amt_tac_t0",
+    "amt_tac_t1",
+    "amt_tac_t2",
+    "amt_tac_t3",
+    "dv_tac_t0",
+    "dv_tac_t1",
+    "dv_tac_t2",
+    "dv_tac_t3",
+    "amt_map_t0",
+    "amt_map_t1",
+    "amt_map_t2",
+    "amt_map_t3",
+    "dv_map_t0",
+    "dv_map_t1",
+    "dv_map_t2",
+    "dv_map_t3"
+  ],
+  "target": "lym",
+  "variable_mode": {
+    "mode": "time-series",
+    "description": "Somente amt_tac, dv_tac, amt_map, dv_map e suas colunas t0..tN.",
+    "feature_count": 20
+  },
+  "protocol": "GroupShuffleSplit para teste; GroupKFold apenas no treino; refit no treino completo",
+  "normalization": {
+    "mode": "all",
+    "description": "MinMax em todos os atributos, lags e no alvo LYM, ajustado apenas no treino de cada fold; os scalers finais são ajustados no treino completo e salvos no Pipeline.",
+    "target_scaled": true,
+    "predictions_inverse_transformed": true,
+    "identifiers_scaled": false
+  },
+  "preprocessing_note": "t0 é o primeiro valor; features correntes são mantidas. A preparação anterior pode usar dados futuros via interpolação/preenchimento. Estudo retrospectivo.",
+  "metrics_weighting": "Por observação, não por paciente",
+  "models": {
+    "random_forest": {
+      "parameters": {
+        "n_estimators": [
+          5,
+          10
+        ]
+      },
+      "candidates": 1,
+      "best_params": {
+        "model__regressor__n_estimators": 10
+      },
+      "metrics": {
+        "rmse": 12.19796511896465,
+        "mae": 10.038260869565221,
+        "r2": -1.458402505217454,
+        "mape_percent_nonzero": 65.16555204320595,
+        "mape_excluded_zeros": 0,
+        "model": "random_forest",
+        "cv_rmse": 11.226465720648196,
+        "fit_seconds": 0.053161596006248146
+      },
+      "shap": {
+        "algorithm": "permutation_pipeline",
+        "fallback_reason": null,
+        "feature_scale": "prepared_features",
+        "target_scale": "original_lym",
+        "samples": 2,
+        "background_samples": 3,
+        "background_source": "train",
+        "explained_source": "test",
+        "seed": 42,
+        "permutations": 1
+      }
+    }
+  },
+  "patient_temporal_analysis": {
+    "status": "complete",
+    "criterion": "RMSE por paciente no conjunto de teste",
+    "directory": "patient_temporal_analysis"
+  },
+  "elapsed_seconds": 4.202237605990376,
+  "finished_at_utc": "2026-09-23T19:46:28.557709+00:00"
+}

@@ -1,0 +1,31 @@
+Experimento: /home/thiago.esterci/Repositories/immuno_supression/studies/ml/study_20260923T202927Z_gnkfJw/20260923T203053_877386Z_random_all_vars-time-series_lags5_folds5_seed42
+Treino: 240 linhas; teste: 67 linhas
+
+random_forest: 30 candidatos x 5 folds + refit
+Fitting 5 folds for each of 30 candidates, totalling 150 fits
+  R² CV: 0.6535; RMSE teste: 3.6761; calculando SHAP...
+
+gradient_boosting: 30 candidatos x 5 folds + refit
+Fitting 5 folds for each of 30 candidates, totalling 150 fits
+  R² CV: 0.6244; RMSE teste: 3.7214; calculando SHAP...
+
+adaboost: 30 candidatos x 5 folds + refit
+Fitting 5 folds for each of 30 candidates, totalling 150 fits
+  R² CV: 0.6677; RMSE teste: 3.6805; calculando SHAP...
+
+Resultados no conjunto de teste:
+    rmse      mae       r2  mape_percent_nonzero  mape_excluded_zeros             model    cv_r2  fit_seconds
+3.676094 2.062127 0.780085              9.804968                    0     random_forest 0.653529    11.897947
+3.721449 2.269090 0.774625             10.809424                    0 gradient_boosting 0.624350     5.721888
+3.680546 2.011160 0.779552              8.890179                    0          adaboost 0.667717     8.020735
+
+Gerando análise temporal por paciente...
+            model classification   id  observations     rmse      mae      bias  time_min  time_max
+    random_forest           best 55.0           4.0 0.379262 0.353848  0.353848   1188.00   2209.50
+    random_forest          worst  4.0          21.0 4.620721 2.872922 -1.210154    172.00   4199.95
+gradient_boosting           best 55.0           4.0 1.496579 1.476943 -1.476943   1188.00   2209.50
+gradient_boosting          worst 32.0          12.0 4.722895 2.459970  2.140878    852.00   2244.00
+         adaboost           best 34.0           5.0 0.899645 0.830961  0.830961   4439.95   4444.00
+         adaboost          worst  4.0          21.0 4.761129 3.124760 -2.033354    172.00   4199.95
+
+Análise salva em: /home/thiago.esterci/Repositories/immuno_supression/studies/ml/study_20260923T202927Z_gnkfJw/20260923T203053_877386Z_random_all_vars-time-series_lags5_folds5_seed42/patient_temporal_analysis
