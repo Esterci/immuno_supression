@@ -1,0 +1,8 @@
+{
+  "model__regressor__subsample": 0.8,
+  "model__regressor__n_estimators": 200,
+  "model__regressor__min_samples_split": 10,
+  "model__regressor__min_samples_leaf": 2,
+  "model__regressor__max_depth": 2,
+  "model__regressor__learning_rate": 0.05
+}

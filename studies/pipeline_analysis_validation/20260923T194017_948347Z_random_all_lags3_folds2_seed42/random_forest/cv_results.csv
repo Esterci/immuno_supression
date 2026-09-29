@@ -1,0 +1,2 @@
+mean_fit_time,std_fit_time,mean_score_time,std_score_time,param_model__regressor__n_estimators,params,split0_test_score,split1_test_score,mean_test_score,std_test_score,rank_test_score,split0_train_score,split1_train_score,mean_train_score,std_train_score
+0.013919234275817871,0.0008853673934936523,0.0029273033142089844,0.00016689300537109375,10,{'model__regressor__n_estimators': 10},-11.606327306443834,-8.771554038846835,-10.188940672645334,1.4173866337984997,1,-1.3914219806389174,-1.1533945497277902,-1.272408265183354,0.1190137154555636

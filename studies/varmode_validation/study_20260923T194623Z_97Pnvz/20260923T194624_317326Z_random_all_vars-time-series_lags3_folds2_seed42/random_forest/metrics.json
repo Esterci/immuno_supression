@@ -1,0 +1,10 @@
+{
+  "rmse": 12.19796511896465,
+  "mae": 10.038260869565221,
+  "r2": -1.458402505217454,
+  "mape_percent_nonzero": 65.16555204320595,
+  "mape_excluded_zeros": 0,
+  "model": "random_forest",
+  "cv_rmse": 11.226465720648196,
+  "fit_seconds": 0.053161596006248146
+}

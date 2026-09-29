@@ -1,0 +1,12 @@
+{
+  "experiment": "/home/thiago.esterci/Repositories/immuno_supression/studies/ml/study_20260923T203602Z_HHB6xY/20260923T203657_539907Z_random_all_vars-all_lags3_folds5_seed42",
+  "criterion": "RMSE por paciente no conjunto de teste",
+  "best_definition": "menor RMSE",
+  "worst_definition": "maior RMSE",
+  "models": [
+    "random_forest",
+    "gradient_boosting",
+    "adaboost"
+  ],
+  "output": "/home/thiago.esterci/Repositories/immuno_supression/studies/ml/study_20260923T203602Z_HHB6xY/20260923T203657_539907Z_random_all_vars-all_lags3_folds5_seed42/patient_temporal_analysis"
+}

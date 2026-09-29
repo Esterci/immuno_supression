@@ -1,0 +1,20 @@
+Experimento: /home/thiago.esterci/Repositories/immuno_supression/studies/normalization_validation/study_20260923T180630Z_KuKOmM/20260923T180640_839957Z_random_none_lags3_folds2_seed42
+Treino: 541 linhas; teste: 185 linhas
+
+random_forest: 1 candidatos x 2 folds + refit
+Fitting 2 folds for each of 1 candidates, totalling 2 fits
+  RMSE CV: 8.9470; RMSE teste: 13.8542; calculando SHAP...
+
+gradient_boosting: 1 candidatos x 2 folds + refit
+Fitting 2 folds for each of 1 candidates, totalling 2 fits
+  RMSE CV: 8.5030; RMSE teste: 11.3403; calculando SHAP...
+
+adaboost: 1 candidatos x 2 folds + refit
+Fitting 2 folds for each of 1 candidates, totalling 2 fits
+  RMSE CV: 8.6442; RMSE teste: 12.6427; calculando SHAP...
+
+Resultados no conjunto de teste:
+     rmse       mae        r2  mape_percent_nonzero  mape_excluded_zeros             model  cv_rmse  fit_seconds
+13.854151 11.367892 -2.261767             85.559630                    0     random_forest 8.946969     1.363120
+11.340342  9.048900 -1.185473             71.184129                    0 gradient_boosting 8.502980     1.027391
+12.642695 10.531492 -1.716267             77.363197                    0          adaboost 8.644193     0.055322

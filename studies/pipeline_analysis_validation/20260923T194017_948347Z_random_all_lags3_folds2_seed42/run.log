@@ -1,0 +1,17 @@
+Experimento: /home/thiago.esterci/Repositories/immuno_supression/studies/pipeline_analysis_validation/20260923T194017_948347Z_random_all_lags3_folds2_seed42
+Treino: 314 linhas; teste: 115 linhas
+
+random_forest: 1 candidatos x 2 folds + refit
+Fitting 2 folds for each of 1 candidates, totalling 2 fits
+  RMSE CV: 10.1889; RMSE teste: 13.2548; calculando SHAP...
+
+Resultados no conjunto de teste:
+     rmse       mae       r2  mape_percent_nonzero  mape_excluded_zeros         model   cv_rmse  fit_seconds
+13.254845 10.680522 -1.90287             67.148423                    0 random_forest 10.188941     0.060479
+
+Gerando análise temporal por paciente...
+        model classification   id  observations      rmse     mae    bias  time_min  time_max
+random_forest           best 36.0          20.0  5.301447  4.9315 -4.9315     794.0    4396.0
+random_forest          worst 30.0          20.0 20.396345 20.1340 20.1340     794.0    4396.0
+
+Análise salva em: /home/thiago.esterci/Repositories/immuno_supression/studies/pipeline_analysis_validation/20260923T194017_948347Z_random_all_lags3_folds2_seed42/patient_temporal_analysis

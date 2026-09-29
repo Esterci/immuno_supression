@@ -1,0 +1,230 @@
+{
+  "status": "complete",
+  "started_at_utc": "20260923T180534_390411Z",
+  "config": {
+    "data": "/home/thiago.esterci/Repositories/immuno_supression/data/clean_processed.parquet",
+    "output_dir": "/home/thiago.esterci/Repositories/immuno_supression/studies/normalization_validation/study_20260923T180524Z_jd2UKc",
+    "search": "random",
+    "lags": 3,
+    "folds": 2,
+    "n_iter": 1,
+    "seed": 42,
+    "n_jobs": 4,
+    "test_size": 0.2,
+    "normalization": "time-series",
+    "models": [
+      "random_forest",
+      "gradient_boosting",
+      "adaboost"
+    ],
+    "shap_samples": 4,
+    "shap_background": 5,
+    "shap_permutations": 1,
+    "quick": true
+  },
+  "python": "3.11.16 (main, Sep  2 2026, 23:39:52) [GCC 15.3.0]",
+  "python_executable": "/home/thiago.esterci/.conda/envs/transplant_ml/bin/python",
+  "command": [
+    "/home/thiago.esterci/Repositories/immuno_supression/runners/run_ml_experiment.py",
+    "--search",
+    "random",
+    "--lags",
+    "3",
+    "--folds",
+    "2",
+    "--seed",
+    "42",
+    "--n-iter",
+    "1",
+    "--n-jobs",
+    "4",
+    "--output-dir",
+    "studies/normalization_validation/study_20260923T180524Z_jd2UKc",
+    "--normalization",
+    "time-series",
+    "--quick",
+    "--shap-samples",
+    "4",
+    "--shap-background",
+    "5",
+    "--shap-permutations",
+    "1"
+  ],
+  "versions": {
+    "numpy": "2.4.6",
+    "pandas": "3.0.6",
+    "scikit-learn": "1.9.1",
+    "matplotlib": "3.11.2",
+    "shap": "0.51.0",
+    "pyarrow": "25.0.0",
+    "joblib": "1.6.0"
+  },
+  "source_sha256": {
+    "methods/ml_models.py": "45561ca8b540d940ea3e6a5f9274a3b19a329f9182257dcdcad28bdeee26cfca",
+    "utils/ml_reports.py": "6d9b11da7571aa20ec284fb8ab06e71056150c21b18e867c0142f6139162694d",
+    "runners/run_ml_experiment.py": "b513f7903a070296f555feacbcbe76da7778ba862610f4e9c4448b4680170e8f",
+    "shells/run_ml_experiments.sh": "11f598d782a71ef29b72132a5f5857b596c9d121491645f8fee5deda04c828a3",
+    "data_preparation.py": "57f1d365658eb18c8cd8c9b8623aeebb33bb0bebb6adfcee1bde132babec5cc0",
+    "transplant_ml.yml": "ef449906faf3827de28e855c55d39a5783e48e7b54733b197f330dcb6c11bfd6"
+  },
+  "input_sha256": "3297992b49f405ed5ac6a61a30e51abab74120bf615029cd72e85b556923c608",
+  "rows_before": 807,
+  "rows_after_lags": 726,
+  "patients_before": 27,
+  "missing_before": 0,
+  "missing_features": 0,
+  "patients_after_lags": 27,
+  "train_rows": 541,
+  "test_rows": 185,
+  "train_patients": 21,
+  "test_patients": 6,
+  "features": [
+    "tad",
+    "m155",
+    "age",
+    "sex",
+    "wgt",
+    "hgt",
+    "dty",
+    "gf",
+    "gfc",
+    "ifc",
+    "dage",
+    "cisq",
+    "dyl",
+    "oifc",
+    "cmv",
+    "bkv",
+    "dm",
+    "amt_tac",
+    "dv_tac",
+    "amt_map",
+    "dv_map",
+    "amt_tac_t0",
+    "amt_tac_t1",
+    "amt_tac_t2",
+    "amt_tac_t3",
+    "dv_tac_t0",
+    "dv_tac_t1",
+    "dv_tac_t2",
+    "dv_tac_t3",
+    "amt_map_t0",
+    "amt_map_t1",
+    "amt_map_t2",
+    "amt_map_t3",
+    "dv_map_t0",
+    "dv_map_t1",
+    "dv_map_t2",
+    "dv_map_t3"
+  ],
+  "target": "lym",
+  "protocol": "GroupShuffleSplit para teste; GroupKFold apenas no treino; refit no treino completo",
+  "normalization": {
+    "mode": "time-series",
+    "description": "MinMax das quatro variáveis temporais por paciente, usando sua série completa (antigo patient).",
+    "target_scaled": false,
+    "identifiers_scaled": false
+  },
+  "preprocessing_note": "t0 é o primeiro valor; features correntes são mantidas. A preparação anterior pode usar dados futuros via interpolação/preenchimento. Estudo retrospectivo.",
+  "metrics_weighting": "Por observação, não por paciente",
+  "models": {
+    "random_forest": {
+      "parameters": {
+        "n_estimators": [
+          5,
+          10
+        ]
+      },
+      "candidates": 1,
+      "best_params": {
+        "n_estimators": 10
+      },
+      "metrics": {
+        "rmse": 13.48703509581241,
+        "mae": 10.92097297297297,
+        "r2": -2.0911931272868096,
+        "mape_percent_nonzero": 83.77156110304843,
+        "mape_excluded_zeros": 0,
+        "model": "random_forest",
+        "cv_rmse": 8.795523016698628,
+        "fit_seconds": 1.0167307950323448
+      },
+      "shap": {
+        "algorithm": "tree_interventional",
+        "feature_scale": "prepared_features",
+        "samples": 4,
+        "background_samples": 5,
+        "background_source": "train",
+        "explained_source": "test",
+        "seed": 42,
+        "permutations": null
+      }
+    },
+    "gradient_boosting": {
+      "parameters": {
+        "n_estimators": [
+          5,
+          10
+        ]
+      },
+      "candidates": 1,
+      "best_params": {
+        "n_estimators": 10
+      },
+      "metrics": {
+        "rmse": 11.151160915747434,
+        "mae": 9.02779651076543,
+        "r2": -1.1131646146291332,
+        "mape_percent_nonzero": 69.27377766328105,
+        "mape_excluded_zeros": 0,
+        "model": "gradient_boosting",
+        "cv_rmse": 8.466409977118161,
+        "fit_seconds": 0.8547352409805171
+      },
+      "shap": {
+        "algorithm": "tree_interventional",
+        "feature_scale": "prepared_features",
+        "samples": 4,
+        "background_samples": 5,
+        "background_source": "train",
+        "explained_source": "test",
+        "seed": 42,
+        "permutations": null
+      }
+    },
+    "adaboost": {
+      "parameters": {
+        "n_estimators": [
+          5,
+          10
+        ]
+      },
+      "candidates": 1,
+      "best_params": {
+        "n_estimators": 10
+      },
+      "metrics": {
+        "rmse": 11.82439708275375,
+        "mae": 9.883082114983655,
+        "r2": -1.3760259261062031,
+        "mape_percent_nonzero": 73.65139417180092,
+        "mape_excluded_zeros": 0,
+        "model": "adaboost",
+        "cv_rmse": 9.300410771452308,
+        "fit_seconds": 0.05273307499010116
+      },
+      "shap": {
+        "algorithm": "permutation",
+        "feature_scale": "prepared_features",
+        "samples": 4,
+        "background_samples": 5,
+        "background_source": "train",
+        "explained_source": "test",
+        "seed": 42,
+        "permutations": 1
+      }
+    }
+  },
+  "elapsed_seconds": 6.858816658030264,
+  "finished_at_utc": "2026-09-23T18:05:41.280384+00:00"
+}
