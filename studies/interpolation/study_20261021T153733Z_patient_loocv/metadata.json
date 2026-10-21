@@ -1,0 +1,96 @@
+{
+  "status": "complete",
+  "started_at_utc": "2026-10-21T15:37:33.745112+00:00",
+  "finished_at_utc": "2026-10-21T15:37:36.331427+00:00",
+  "protocol": {
+    "validation": "leave-one-observed-internal-exam-out within patient",
+    "endpoint_policy": "excluded; interpolation only, no extrapolation",
+    "same_folds_for_all_methods": true,
+    "aggregation": {
+      "patient_weight": "equal",
+      "mae": "mean of patient MAE",
+      "rmse": "sqrt(mean of patient MSE)",
+      "bias": "mean of patient mean(predicted - observed)"
+    },
+    "selection": "minimum macro RMSE, then macro MAE",
+    "min_observations": 5,
+    "normalization": {
+      "mode": "patient-train-minmax",
+      "scope": "one scaler per patient, series and LOOCV fold",
+      "fit": "training exams from that patient only",
+      "metrics_scale": "normalized",
+      "original_values_preserved": true,
+      "constant_training_range": "effective range 1, matching MinMaxScaler"
+    }
+  },
+  "series": [
+    "m155",
+    "wgt",
+    "gf",
+    "lym",
+    "dv_tac",
+    "dv_map"
+  ],
+  "series_validity_rules": {
+    "m155": "strictly_positive"
+  },
+  "excluded_by_semantics": {
+    "binary_indicators": [
+      "ifc",
+      "oifc",
+      "cmv",
+      "bkv",
+      "dm"
+    ],
+    "treatments_or_timing": [
+      "amt_tac",
+      "amt_map",
+      "tad"
+    ],
+    "static": [
+      "age",
+      "sex",
+      "hgt",
+      "dty",
+      "dage",
+      "cisq",
+      "dyl"
+    ]
+  },
+  "methods": [
+    "linear",
+    "pchip",
+    "cubic_spline_natural",
+    "temporal_regression_linear",
+    "temporal_regression_quadratic",
+    "temporal_regression_cubic"
+  ],
+  "inputs": {
+    "lr_input": {
+      "path": "data/lr_input.parquet",
+      "sha256": "e70710ec834827a707a256c0d1679b57196e224bc3a0affce729c2f1bbb90a83"
+    },
+    "mpa": {
+      "path": "data/mpa.parquet",
+      "sha256": "28208e38001c14085db935fbd11563bc177c5a6d03460e337245485b57b040ba"
+    },
+    "tacrolimus": {
+      "path": "data/tacrolimus.parquet",
+      "sha256": "299ae04dd7a3cd7f19d90cb62ff73735a6f95f459c3b74eb4df103f164412fa0"
+    }
+  },
+  "outputs": {
+    "exam_predictions": "exam_predictions.parquet",
+    "patient_metrics": "patient_metrics.csv",
+    "macro_metrics": "macro_metrics.csv",
+    "best_methods": "best_methods.csv",
+    "eligibility": "eligibility.csv",
+    "plot": "rmse_comparison.png"
+  },
+  "versions": {
+    "python": "3.13.2",
+    "numpy": "1.26.4",
+    "pandas": "2.2.1",
+    "scipy": "1.15.2"
+  }
+}

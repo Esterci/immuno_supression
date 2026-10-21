@@ -1,0 +1,7 @@
+series,observed_exams,observed_patients,eligible_patients,eligible_exams_per_method,duplicate_rows_collapsed,min_observations,normalization
+m155,183,58,11,33,0,5,patient-train-minmax
+wgt,1411,58,55,1295,0,5,patient-train-minmax
+gf,1410,58,55,1294,0,5,patient-train-minmax
+lym,1052,56,52,942,0,5,patient-train-minmax
+dv_tac,744,54,52,632,0,5,patient-train-minmax
+dv_map,923,55,52,816,0,5,patient-train-minmax
