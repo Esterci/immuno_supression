@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from methods.interpolation_validation import calculate_metrics, run_patient_loocv
+from methods.interpolation import calculate_metrics, run_patient_loocv
 
 
 class InterpolationValidationTest(unittest.TestCase):

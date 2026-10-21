@@ -20,7 +20,7 @@ import pandas as pd
 import scipy
 
 from data_preparation import merge_db, normalizar_colunas, translating_flags
-from methods.interpolation_validation import (
+from methods.interpolation import (
     DEFAULT_SERIES,
     METHODS,
     SERIES_VALIDITY_RULES,
