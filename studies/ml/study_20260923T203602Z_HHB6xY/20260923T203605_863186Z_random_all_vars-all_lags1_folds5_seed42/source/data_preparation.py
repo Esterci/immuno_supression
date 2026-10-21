@@ -174,7 +174,6 @@ def translating_flags(merged_df):
         "dage",
         "cisq",
         "dyl",
-        "dm",
     ]
 
     print("  Propagando dados estáticos dentro de cada paciente...")
@@ -197,7 +196,7 @@ def ts_interpolation(df_final):
 
     print("\n[4/6] Interpolando séries temporais...")
 
-    colunas_temporais = ["dv_tac", "dv_map"]
+    colunas_temporais = ["dv_tac", "dv_map", "dm", "m155"]
 
     df_final = df_final.sort_values(["id", "time"]).copy()
 
@@ -263,7 +262,7 @@ def data_cleaning(final_df):
 
     print("\n[5/6] Criando base limpa...")
 
-    colunas_obrigatorias = ["m155", "ifc", "cisq", "dyl", "lym"]
+    colunas_obrigatorias = ["m155", "ifc", "cisq", "dyl", "lym", "dm"]
 
     antes = len(final_df)
 
