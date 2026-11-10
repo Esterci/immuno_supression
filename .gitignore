@@ -15,3 +15,4 @@ venv/
 .DS_Store
 
 # Data and experiment outputs are intentionally versioned.
+*.pyc

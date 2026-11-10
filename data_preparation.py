@@ -8,6 +8,20 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
+from methods.interpolation import METHODS, SERIES_VALIDITY_RULES
+
+
+# Vencedores de studies/interpolation/study_20261021T153733Z_patient_loocv/
+# best_methods.csv. Mantenha a escolha explícita para facilitar estudos futuros.
+INTERPOLATION_METHODS = {
+    "dv_map": "pchip",
+    "dv_tac": "pchip",
+    "gf": "pchip",
+    "lym": "linear",
+    "m155": "temporal_regression_quadratic",
+    "wgt": "linear",
+}
+
 
 def normalizar_colunas(df):
     """Normaliza os nomes das colunas."""
@@ -193,27 +207,73 @@ def translating_flags(merged_df):
 # ---------------------------------------------------------
 
 
+def _interpolate_patient_series(patient, column, method_name):
+    """Interpola lacunas internas e completa bordas pelo valor mais próximo."""
+    result = pd.to_numeric(patient[column], errors="coerce").copy()
+    times = pd.to_numeric(patient["time"], errors="coerce")
+    observed = pd.DataFrame({"time": times, "value": result}).replace(
+        [np.inf, -np.inf], np.nan
+    ).dropna()
+    if SERIES_VALIDITY_RULES.get(column) == "strictly_positive":
+        observed = observed.loc[observed["value"] > 0]
+    observed = observed.groupby("time", as_index=False)["value"].mean()
+
+    if observed.empty:
+        return result
+
+    x = observed["time"].to_numpy(dtype=float)
+    y = observed["value"].to_numpy(dtype=float)
+    valid_missing = result.isna() & times.notna()
+    result.loc[valid_missing & times.le(float(x.min()))] = y[0]
+    result.loc[valid_missing & times.ge(float(x.max()))] = y[-1]
+
+    minimum_observations = (
+        3 if method_name == "temporal_regression_quadratic" else 2
+    )
+    if len(observed) < minimum_observations:
+        return result
+
+    estimator = METHODS[method_name]
+    internal_missing = (
+        result.isna()
+        & times.notna()
+        & times.between(float(x.min()), float(x.max()))
+    )
+    for index in patient.index[internal_missing]:
+        predicted = estimator(x, y, float(times.loc[index]))
+        if np.isfinite(predicted):
+            result.loc[index] = predicted
+    return result
+
+
 def ts_interpolation(df_final):
 
     print("\n[4/6] Interpolando séries temporais...")
 
-    colunas_temporais = ["dv_tac", "dv_map"]
+    missing_columns = sorted(set(INTERPOLATION_METHODS) - set(df_final.columns))
+    if missing_columns:
+        raise ValueError(f"Colunas ausentes para interpolação: {missing_columns}")
 
     df_final = df_final.sort_values(["id", "time"]).copy()
 
     print("  NaNs antes da interpolação:")
 
-    for coluna in colunas_temporais:
-        print(f"    {coluna}: {df_final[coluna].isna().sum()}")
+    for coluna, metodo in INTERPOLATION_METHODS.items():
+        print(f"    {coluna} ({metodo}): {df_final[coluna].isna().sum()}")
 
-    df_final[colunas_temporais] = df_final.groupby("id")[colunas_temporais].transform(
-        lambda x: x.interpolate(method="linear", limit_direction="both")
-    )
+    for coluna, metodo in INTERPOLATION_METHODS.items():
+        interpolated = pd.to_numeric(df_final[coluna], errors="coerce").copy()
+        for indices in df_final.groupby("id", sort=False).groups.values():
+            patient = df_final.loc[indices]
+            interpolated.loc[indices] = _interpolate_patient_series(
+                patient, coluna, metodo
+            )
+        df_final[coluna] = interpolated
 
     print("  NaNs após interpolação:")
 
-    for coluna in colunas_temporais:
-        print(f"    {coluna}: {df_final[coluna].isna().sum()}")
+    for coluna, metodo in INTERPOLATION_METHODS.items():
+        print(f"    {coluna} ({metodo}): {df_final[coluna].isna().sum()}")
 
     # -----------------------------------------------------
     # Pacientes sem nenhum dado de MPA
@@ -320,7 +380,7 @@ def main():
 
     lr_input_df, mpa_df, tacrolimus_df = read_data()
     metadata = {
-        "versao": 2,
+        "versao": 3,
         "gerado_em_utc": datetime.now(timezone.utc).isoformat(),
         "definicao_missing": (
             "Valores reconhecidos por pandas.isna (NaN, None, NA, NaT). "
@@ -334,6 +394,18 @@ def main():
             "tacrolimus": dataset_metadata(tacrolimus_df),
         },
         "etapas": {},
+        "interpolacao": {
+            "metodos_por_serie": INTERPOLATION_METHODS,
+            "escopo": "Por paciente, usando o tempo real",
+            "tratamento_das_bordas": (
+                "Lacunas antes/depois da faixa observada recebem o valor "
+                "observado mais próximo; pacientes sem observações permanecem ausentes"
+            ),
+            "origem": (
+                "studies/interpolation/study_20261021T153733Z_patient_loocv/"
+                "best_methods.csv"
+            ),
+        },
     }
 
     metadata["exclusao_occ5"] = {

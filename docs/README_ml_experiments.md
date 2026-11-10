@@ -35,6 +35,10 @@ VARMODE=time-series N_ITER=30 N_JOBS=4 bash shells/run_ml_experiments.sh
 configurado para `amt_tac`, `dv_tac`, `amt_map`, `dv_map`, `time` e `lym`,
 além do tempo atual `time`. As variáveis clínicas e demográficas são excluídas.
 `id` e `lym` atual ficam fora de `X`; `lym` atual permanece como alvo.
+Nesse modo, a entrada padrão é `data/full_processed.parquet`: pacientes não são
+descartados por atributos clínicos ausentes, somente pela ausência das séries
+temporais farmacológicas durante a preparação. O modo `all` continua usando
+`data/clean_processed.parquet`. A opção `--data` permite sobrescrever essa escolha.
 Essa opção é independente de
 `--normalization`: por exemplo, as séries selecionadas ainda podem usar a
 normalização `all` do Pipeline.
