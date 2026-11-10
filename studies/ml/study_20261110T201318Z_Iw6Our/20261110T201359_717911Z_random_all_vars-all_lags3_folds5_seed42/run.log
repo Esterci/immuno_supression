@@ -1,0 +1,32 @@
+Experimento: /home/thiago.esterci/Repositories/immuno_supression/studies/ml/study_20261110T201318Z_Iw6Our/20261110T201359_717911Z_random_all_vars-all_lags3_folds5_seed42
+Treino: 341 linhas; teste: 75 linhas
+
+random_forest: 30 candidatos x 5 folds + refit
+Fitting 5 folds for each of 30 candidates, totalling 150 fits
+  R² CV: 0.6650; RMSE teste: 2.8258; calculando SHAP...
+PermutationExplainer explainer:  96%|#########6| 72/75 [00:00<?, ?it/s]PermutationExplainer explainer:  99%|#########8| 74/75 [00:10<00:00, 19.85it/s]PermutationExplainer explainer: 76it [00:10, 12.79it/s]                        PermutationExplainer explainer: 76it [00:10,  2.59s/it]
+
+gradient_boosting: 30 candidatos x 5 folds + refit
+Fitting 5 folds for each of 30 candidates, totalling 150 fits
+  R² CV: 0.6031; RMSE teste: 2.9308; calculando SHAP...
+
+adaboost: 30 candidatos x 5 folds + refit
+Fitting 5 folds for each of 30 candidates, totalling 150 fits
+  R² CV: 0.6326; RMSE teste: 3.2854; calculando SHAP...
+
+Resultados no conjunto de teste:
+    rmse      mae       r2  mape_percent_nonzero  mape_excluded_zeros             model    cv_r2  fit_seconds
+2.825800 1.684501 0.891047              9.646172                    0     random_forest 0.664960     7.766291
+2.930778 1.774792 0.882802             11.344745                    0 gradient_boosting 0.603092     3.619177
+3.285389 2.181366 0.852725             13.179992                    0          adaboost 0.632619     4.699835
+
+Gerando análise temporal por paciente...
+            model classification   id  observations     rmse      mae      bias  time_min  time_max
+    random_forest           best 40.0          19.0 0.986511 0.749472  0.285489     820.0    4444.0
+    random_forest          worst  4.0          19.0 4.075100 2.358625 -1.478524     892.0    4204.0
+gradient_boosting           best 55.0           5.0 1.269107 1.074093 -0.294392    1176.0    2209.5
+gradient_boosting          worst  4.0          19.0 3.913044 1.865958 -0.999561     892.0    4204.0
+         adaboost           best 40.0          19.0 1.282949 0.953326 -0.009758     820.0    4444.0
+         adaboost          worst  4.0          19.0 4.664919 3.083642 -2.272153     892.0    4204.0
+
+Análise salva em: /home/thiago.esterci/Repositories/immuno_supression/studies/ml/study_20261110T201318Z_Iw6Our/20261110T201359_717911Z_random_all_vars-all_lags3_folds5_seed42/patient_temporal_analysis

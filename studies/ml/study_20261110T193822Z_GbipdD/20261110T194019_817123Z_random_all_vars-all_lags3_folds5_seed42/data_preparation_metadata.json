@@ -1,0 +1,1043 @@
+{
+  "versao": 3,
+  "gerado_em_utc": "2026-11-10T19:39:01.649817+00:00",
+  "definicao_missing": "Valores reconhecidos por pandas.isna (NaN, None, NA, NaT). Flags e sentinelas como 9999 não contam como missing antes de sua tradução. O tratamento também preenche valores ausentes. Totais de missing entre etapas podem envolver colunas diferentes.",
+  "antes": {
+    "lr_input": {
+      "linhas": 1525,
+      "colunas": 25,
+      "pacientes": 58,
+      "linhas_sem_id": 0,
+      "linhas_duplicadas": 0,
+      "missing_values": 1,
+      "missing_percentual": 0.002622950819672131,
+      "linhas_com_missing": 1,
+      "pacientes_com_missing": 1,
+      "por_coluna": {
+        "id": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "time": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "tad": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "occ": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "ar": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "m155": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "age": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "sex": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "wgt": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "hgt": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "imc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dty": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "gf": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "gfc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "ifc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dage": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "cisq": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dyl": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dylc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "lym": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "nta": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "oifc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "cmv": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "bkv": {
+          "tipo": "float64",
+          "missing_values": 1,
+          "missing_percentual": 0.06557377049180328
+        },
+        "dm": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        }
+      }
+    },
+    "mpa": {
+      "linhas": 1527,
+      "colunas": 29,
+      "pacientes": 56,
+      "linhas_sem_id": 0,
+      "linhas_duplicadas": 0,
+      "missing_values": 0,
+      "missing_percentual": 0.0,
+      "linhas_com_missing": 0,
+      "pacientes_com_missing": 0,
+      "por_coluna": {
+        "id": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "time": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "tad": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "amt": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dv": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "mdv": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "evid": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "occ": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "ii": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "addl": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "cmt": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "age": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "sex": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "wgt": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "hgt": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "imc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dty": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "gf": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "gfc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "ifc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dage": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "cisq": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dyl": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "lym": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "nta": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "oifc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "cmv": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "bkv": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dm": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        }
+      }
+    },
+    "tacrolimus": {
+      "linhas": 1596,
+      "colunas": 29,
+      "pacientes": 58,
+      "linhas_sem_id": 0,
+      "linhas_duplicadas": 0,
+      "missing_values": 0,
+      "missing_percentual": 0.0,
+      "linhas_com_missing": 0,
+      "pacientes_com_missing": 0,
+      "por_coluna": {
+        "id": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "time": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "tad": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "amt": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dv": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "mdv": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "evid": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "occ": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "ii": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "addl": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "cmt": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "age": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "sex": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "wgt": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "hgt": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "imc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dty": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "gf": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "ifc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "ar": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dage": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "cisq": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dyl": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "lym": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "nta": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "oifc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "cmv": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "bkv": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dm": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        }
+      }
+    }
+  },
+  "etapas": {
+    "apos_merge": {
+      "linhas": 620,
+      "colunas": 27,
+      "pacientes": 46,
+      "linhas_sem_id": 0,
+      "linhas_duplicadas": 0,
+      "missing_values": 144,
+      "missing_percentual": 0.8602150537634409,
+      "linhas_com_missing": 47,
+      "pacientes_com_missing": 8,
+      "por_coluna": {
+        "id": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "time": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "tad": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "m155": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "age": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "sex": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "wgt": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "hgt": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dty": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "gf": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "gfc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "ifc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dage": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "cisq": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dyl": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dylc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "lym": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "oifc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "cmv": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "bkv": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dm": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "amt": {
+          "tipo": "float64",
+          "missing_values": 1,
+          "missing_percentual": 0.16129032258064516
+        },
+        "dv": {
+          "tipo": "float64",
+          "missing_values": 1,
+          "missing_percentual": 0.16129032258064516
+        },
+        "mdv": {
+          "tipo": "float64",
+          "missing_values": 1,
+          "missing_percentual": 0.16129032258064516
+        },
+        "amt_map": {
+          "tipo": "float64",
+          "missing_values": 47,
+          "missing_percentual": 7.580645161290322
+        },
+        "dv_map": {
+          "tipo": "float64",
+          "missing_values": 47,
+          "missing_percentual": 7.580645161290322
+        },
+        "mdv_map": {
+          "tipo": "float64",
+          "missing_values": 47,
+          "missing_percentual": 7.580645161290322
+        }
+      }
+    },
+    "apos_flags_e_preenchimento": {
+      "linhas": 620,
+      "colunas": 24,
+      "pacientes": 46,
+      "linhas_sem_id": 0,
+      "linhas_duplicadas": 0,
+      "missing_values": 813,
+      "missing_percentual": 5.463709677419355,
+      "linhas_com_missing": 445,
+      "pacientes_com_missing": 46,
+      "por_coluna": {
+        "id": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "time": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "tad": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "m155": {
+          "tipo": "float64",
+          "missing_values": 17,
+          "missing_percentual": 2.741935483870968
+        },
+        "age": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "sex": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "wgt": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "hgt": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dty": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "gf": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "gfc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "ifc": {
+          "tipo": "float64",
+          "missing_values": 10,
+          "missing_percentual": 1.6129032258064515
+        },
+        "dage": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "cisq": {
+          "tipo": "float64",
+          "missing_values": 258,
+          "missing_percentual": 41.612903225806456
+        },
+        "dyl": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "lym": {
+          "tipo": "float64",
+          "missing_values": 22,
+          "missing_percentual": 3.5483870967741935
+        },
+        "oifc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "cmv": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "bkv": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dm": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "amt_tac": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dv_tac": {
+          "tipo": "float64",
+          "missing_values": 280,
+          "missing_percentual": 45.16129032258064
+        },
+        "amt_map": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dv_map": {
+          "tipo": "float64",
+          "missing_values": 226,
+          "missing_percentual": 36.45161290322581
+        }
+      }
+    }
+  },
+  "interpolacao": {
+    "metodos_por_serie": {
+      "dv_map": "pchip",
+      "dv_tac": "pchip",
+      "gf": "pchip",
+      "lym": "linear",
+      "m155": "temporal_regression_quadratic",
+      "wgt": "linear"
+    },
+    "escopo": "Por paciente, usando o tempo real",
+    "tratamento_das_bordas": "Lacunas antes/depois da faixa observada recebem o valor observado mais próximo; pacientes sem observações permanecem ausentes",
+    "origem": "studies/interpolation/study_20261021T153733Z_patient_loocv/best_methods.csv"
+  },
+  "exclusao_occ5": {
+    "momento": "Antes do merge, preenchimento e interpolação",
+    "linhas_removidas": {
+      "lr_input": 905,
+      "mpa": 914,
+      "tacrolimus": 945
+    }
+  },
+  "depois": {
+    "full_processed": {
+      "linhas": 589,
+      "colunas": 24,
+      "pacientes": 43,
+      "linhas_sem_id": 0,
+      "linhas_duplicadas": 0,
+      "missing_values": 254,
+      "missing_percentual": 1.7968307866440294,
+      "linhas_com_missing": 248,
+      "pacientes_com_missing": 22,
+      "por_coluna": {
+        "id": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "time": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "tad": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "m155": {
+          "tipo": "float64",
+          "missing_values": 7,
+          "missing_percentual": 1.1884550084889642
+        },
+        "age": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "sex": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "wgt": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "hgt": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dty": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "gf": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "gfc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "ifc": {
+          "tipo": "float64",
+          "missing_values": 5,
+          "missing_percentual": 0.8488964346349746
+        },
+        "dage": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "cisq": {
+          "tipo": "float64",
+          "missing_values": 237,
+          "missing_percentual": 40.2376910016978
+        },
+        "dyl": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "lym": {
+          "tipo": "float64",
+          "missing_values": 5,
+          "missing_percentual": 0.8488964346349746
+        },
+        "oifc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "cmv": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "bkv": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dm": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "amt_tac": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dv_tac": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "amt_map": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dv_map": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        }
+      }
+    },
+    "clean_processed": {
+      "linhas": 341,
+      "colunas": 24,
+      "pacientes": 24,
+      "linhas_sem_id": 0,
+      "linhas_duplicadas": 0,
+      "missing_values": 0,
+      "missing_percentual": 0.0,
+      "linhas_com_missing": 0,
+      "pacientes_com_missing": 0,
+      "por_coluna": {
+        "id": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "time": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "tad": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "m155": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "age": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "sex": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "wgt": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "hgt": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dty": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "gf": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "gfc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "ifc": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dage": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "cisq": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dyl": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "lym": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "oifc": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "cmv": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "bkv": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dm": {
+          "tipo": "int64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "amt_tac": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dv_tac": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "amt_map": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        },
+        "dv_map": {
+          "tipo": "float64",
+          "missing_values": 0,
+          "missing_percentual": 0.0
+        }
+      }
+    }
+  },
+  "comparacao_com_lr_input": {
+    "full_processed": {
+      "linhas_removidas": 936,
+      "pacientes_removidos": 15
+    },
+    "clean_processed": {
+      "linhas_removidas": 1184,
+      "pacientes_removidos": 34
+    }
+  }
+}
