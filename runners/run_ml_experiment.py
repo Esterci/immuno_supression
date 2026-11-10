@@ -45,7 +45,13 @@ class Tee:
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--data", type=Path, default=BASE / "data/clean_processed.parquet"
+        "--data",
+        type=Path,
+        default=None,
+        help=(
+            "Parquet de entrada. Por padrão usa full_processed no modo time-series "
+            "e clean_processed no modo all."
+        ),
     )
     parser.add_argument("--output-dir", type=Path, default=BASE / "studies/ml")
     parser.add_argument("--search", choices=["grid", "random"], default="random")
@@ -90,6 +96,13 @@ def parse_args(argv=None):
     ):
         parser.error("Exige 0 < test-size < 1 e parâmetros SHAP positivos")
     args.models = list(dict.fromkeys(args.models))
+    if args.data is None:
+        filename = (
+            "full_processed.parquet"
+            if args.var_mode == "time-series"
+            else "clean_processed.parquet"
+        )
+        args.data = BASE / "data" / filename
     return args
 
 

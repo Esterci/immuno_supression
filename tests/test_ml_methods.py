@@ -1,13 +1,25 @@
 import unittest
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.base import clone
 from methods.ml_models import prepare_features, model_specs, make_search
+from runners.run_ml_experiment import parse_args
 from utils.ml_reports import regression_metrics
 
 
 class MLMethodsTest(unittest.TestCase):
+    def test_default_dataset_depends_on_variable_mode(self):
+        temporal = parse_args(["--var-mode", "time-series"])
+        clinical = parse_args(["--var-mode", "all"])
+        custom = parse_args(["--var-mode", "time-series", "--data", "custom.parquet"])
+
+        self.assertEqual(temporal.data.name, "full_processed.parquet")
+        self.assertEqual(clinical.data.name, "clean_processed.parquet")
+        self.assertEqual(custom.data, Path("custom.parquet"))
+
     def test_normalization_modes_preserve_metadata_and_target(self):
         raw = self.data()
         original = raw.copy(deep=True)
@@ -41,6 +53,18 @@ class MLMethodsTest(unittest.TestCase):
         self.assertNotIn("age", temporal.columns)
         with self.assertRaisesRegex(ValueError, "all ou time-series"):
             prepare_features(raw, 2, "none", var_mode="invalid")
+
+    def test_time_series_keeps_missing_clinical_data_but_drops_missing_target(self):
+        raw = self.data()
+        raw.loc[(raw.id == 0) & (raw.time == 2), "age"] = np.nan
+        raw.loc[(raw.id == 0) & (raw.time == 4), "lym"] = np.nan
+
+        X, y, rows = prepare_features(raw, 1, "none", var_mode="time-series")
+
+        self.assertTrue(((rows.id == 0) & (rows.time == 2)).any())
+        self.assertFalse(((rows.id == 0) & (rows.time == 4)).any())
+        self.assertFalse(y.isna().any())
+        self.assertTrue(np.isfinite(X.to_numpy(dtype=float)).all())
 
     def test_current_temporal_inputs_excluded_in_every_mode(self):
         current = {"amt_tac", "dv_tac", "amt_map", "dv_map"}

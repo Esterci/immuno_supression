@@ -1,6 +1,6 @@
 {
-  "versao": 2,
-  "gerado_em_utc": "2026-09-23T20:36:03.764211+00:00",
+  "versao": 3,
+  "gerado_em_utc": "2026-11-06T20:46:46.858465+00:00",
   "definicao_missing": "Valores reconhecidos por pandas.isna (NaN, None, NA, NaT). Flags e sentinelas como 9999 não contam como missing antes de sua tradução. O tratamento também preenche valores ausentes. Totais de missing entre etapas podem envolver colunas diferentes.",
   "antes": {
     "lr_input": {
@@ -741,6 +741,19 @@
       }
     }
   },
+  "interpolacao": {
+    "metodos_por_serie": {
+      "dv_map": "pchip",
+      "dv_tac": "pchip",
+      "gf": "pchip",
+      "lym": "linear",
+      "m155": "temporal_regression_quadratic",
+      "wgt": "linear"
+    },
+    "escopo": "Por paciente, usando o tempo real",
+    "tratamento_das_bordas": "Lacunas antes/depois da faixa observada recebem o valor observado mais próximo; pacientes sem observações permanecem ausentes",
+    "origem": "studies/interpolation/study_20261021T153733Z_patient_loocv/best_methods.csv"
+  },
   "exclusao_occ5": {
     "momento": "Antes do merge, preenchimento e interpolação",
     "linhas_removidas": {
@@ -756,10 +769,10 @@
       "pacientes": 52,
       "linhas_sem_id": 0,
       "linhas_duplicadas": 0,
-      "missing_values": 954,
-      "missing_percentual": 2.9357459379615953,
-      "linhas_com_missing": 913,
-      "pacientes_com_missing": 50,
+      "missing_values": 605,
+      "missing_percentual": 1.8617676021664205,
+      "linhas_com_missing": 593,
+      "pacientes_com_missing": 30,
       "por_coluna": {
         "id": {
           "tipo": "int64",
@@ -778,8 +791,8 @@
         },
         "m155": {
           "tipo": "float64",
-          "missing_values": 46,
-          "missing_percentual": 3.3973412112259975
+          "missing_values": 8,
+          "missing_percentual": 0.5908419497784343
         },
         "age": {
           "tipo": "int64",
@@ -808,8 +821,8 @@
         },
         "gf": {
           "tipo": "float64",
-          "missing_values": 1,
-          "missing_percentual": 0.07385524372230429
+          "missing_values": 0,
+          "missing_percentual": 0.0
         },
         "gfc": {
           "tipo": "int64",
@@ -838,8 +851,8 @@
         },
         "lym": {
           "tipo": "float64",
-          "missing_values": 335,
-          "missing_percentual": 24.741506646971935
+          "missing_values": 25,
+          "missing_percentual": 1.8463810930576072
         },
         "oifc": {
           "tipo": "int64",
@@ -884,15 +897,15 @@
       }
     },
     "clean_processed": {
-      "linhas": 442,
+      "linhas": 761,
       "colunas": 24,
       "pacientes": 27,
       "linhas_sem_id": 0,
       "linhas_duplicadas": 0,
-      "missing_values": 1,
-      "missing_percentual": 0.00942684766214178,
-      "linhas_com_missing": 1,
-      "pacientes_com_missing": 1,
+      "missing_values": 0,
+      "missing_percentual": 0.0,
+      "linhas_com_missing": 0,
+      "pacientes_com_missing": 0,
       "por_coluna": {
         "id": {
           "tipo": "int64",
@@ -941,8 +954,8 @@
         },
         "gf": {
           "tipo": "float64",
-          "missing_values": 1,
-          "missing_percentual": 0.22624434389140274
+          "missing_values": 0,
+          "missing_percentual": 0.0
         },
         "gfc": {
           "tipo": "int64",
@@ -1023,7 +1036,7 @@
       "pacientes_removidos": 6
     },
     "clean_processed": {
-      "linhas_removidas": 1083,
+      "linhas_removidas": 764,
       "pacientes_removidos": 31
     }
   }
