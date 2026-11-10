@@ -1,6 +1,6 @@
 {
   "versao": 3,
-  "gerado_em_utc": "2026-11-06T20:46:46.858465+00:00",
+  "gerado_em_utc": "2026-11-10T20:13:20.349337+00:00",
   "definicao_missing": "Valores reconhecidos por pandas.isna (NaN, None, NA, NaT). Flags e sentinelas como 9999 não contam como missing antes de sua tradução. O tratamento também preenche valores ausentes. Totais de missing entre etapas podem envolver colunas diferentes.",
   "antes": {
     "lr_input": {
@@ -460,15 +460,15 @@
   },
   "etapas": {
     "apos_merge": {
-      "linhas": 1411,
+      "linhas": 899,
       "colunas": 27,
-      "pacientes": 58,
+      "pacientes": 51,
       "linhas_sem_id": 0,
       "linhas_duplicadas": 0,
-      "missing_values": 274,
-      "missing_percentual": 0.7192167362259495,
-      "linhas_com_missing": 92,
-      "pacientes_com_missing": 15,
+      "missing_values": 177,
+      "missing_percentual": 0.7292052898282042,
+      "linhas_com_missing": 58,
+      "pacientes_com_missing": 10,
       "por_coluna": {
         "id": {
           "tipo": "int64",
@@ -567,8 +567,8 @@
         },
         "bkv": {
           "tipo": "float64",
-          "missing_values": 1,
-          "missing_percentual": 0.07087172218284904
+          "missing_values": 0,
+          "missing_percentual": 0.0
         },
         "dm": {
           "tipo": "int64",
@@ -577,46 +577,46 @@
         },
         "amt": {
           "tipo": "float64",
-          "missing_values": 8,
-          "missing_percentual": 0.5669737774627923
+          "missing_values": 1,
+          "missing_percentual": 0.11123470522803114
         },
         "dv": {
           "tipo": "float64",
-          "missing_values": 8,
-          "missing_percentual": 0.5669737774627923
+          "missing_values": 1,
+          "missing_percentual": 0.11123470522803114
         },
         "mdv": {
           "tipo": "float64",
-          "missing_values": 8,
-          "missing_percentual": 0.5669737774627923
+          "missing_values": 1,
+          "missing_percentual": 0.11123470522803114
         },
         "amt_map": {
           "tipo": "float64",
-          "missing_values": 83,
-          "missing_percentual": 5.88235294117647
+          "missing_values": 58,
+          "missing_percentual": 6.451612903225806
         },
         "dv_map": {
           "tipo": "float64",
-          "missing_values": 83,
-          "missing_percentual": 5.88235294117647
+          "missing_values": 58,
+          "missing_percentual": 6.451612903225806
         },
         "mdv_map": {
           "tipo": "float64",
-          "missing_values": 83,
-          "missing_percentual": 5.88235294117647
+          "missing_values": 58,
+          "missing_percentual": 6.451612903225806
         }
       }
     },
     "apos_flags_e_preenchimento": {
-      "linhas": 1411,
+      "linhas": 899,
       "colunas": 24,
-      "pacientes": 58,
+      "pacientes": 51,
       "linhas_sem_id": 0,
       "linhas_duplicadas": 0,
-      "missing_values": 2135,
-      "missing_percentual": 6.30463028584928,
-      "linhas_com_missing": 1182,
-      "pacientes_com_missing": 58,
+      "missing_values": 1215,
+      "missing_percentual": 5.6312569521690765,
+      "linhas_com_missing": 663,
+      "pacientes_com_missing": 51,
       "por_coluna": {
         "id": {
           "tipo": "int64",
@@ -635,8 +635,8 @@
         },
         "m155": {
           "tipo": "float64",
-          "missing_values": 48,
-          "missing_percentual": 3.401842664776754
+          "missing_values": 31,
+          "missing_percentual": 3.4482758620689653
         },
         "age": {
           "tipo": "int64",
@@ -665,8 +665,8 @@
         },
         "gf": {
           "tipo": "float64",
-          "missing_values": 1,
-          "missing_percentual": 0.07087172218284904
+          "missing_values": 0,
+          "missing_percentual": 0.0
         },
         "gfc": {
           "tipo": "int64",
@@ -676,7 +676,7 @@
         "ifc": {
           "tipo": "float64",
           "missing_values": 11,
-          "missing_percentual": 0.7795889440113395
+          "missing_percentual": 1.2235817575083427
         },
         "dage": {
           "tipo": "int64",
@@ -685,8 +685,8 @@
         },
         "cisq": {
           "tipo": "float64",
-          "missing_values": 560,
-          "missing_percentual": 39.68816442239547
+          "missing_values": 381,
+          "missing_percentual": 42.380422691879865
         },
         "dyl": {
           "tipo": "float64",
@@ -695,8 +695,8 @@
         },
         "lym": {
           "tipo": "float64",
-          "missing_values": 359,
-          "missing_percentual": 25.442948263642805
+          "missing_values": 39,
+          "missing_percentual": 4.338153503893214
         },
         "oifc": {
           "tipo": "int64",
@@ -710,8 +710,8 @@
         },
         "bkv": {
           "tipo": "float64",
-          "missing_values": 1,
-          "missing_percentual": 0.07087172218284904
+          "missing_values": 0,
+          "missing_percentual": 0.0
         },
         "dm": {
           "tipo": "int64",
@@ -725,8 +725,8 @@
         },
         "dv_tac": {
           "tipo": "float64",
-          "missing_values": 667,
-          "missing_percentual": 47.27143869596031
+          "missing_values": 423,
+          "missing_percentual": 47.052280311457174
         },
         "amt_map": {
           "tipo": "float64",
@@ -735,8 +735,8 @@
         },
         "dv_map": {
           "tipo": "float64",
-          "missing_values": 488,
-          "missing_percentual": 34.58540042523033
+          "missing_values": 330,
+          "missing_percentual": 36.70745272525028
         }
       }
     }
@@ -757,22 +757,22 @@
   "exclusao_occ5": {
     "momento": "Antes do merge, preenchimento e interpolação",
     "linhas_removidas": {
-      "lr_input": 114,
-      "mpa": 116,
-      "tacrolimus": 127
+      "lr_input": 626,
+      "mpa": 628,
+      "tacrolimus": 646
     }
   },
   "depois": {
     "full_processed": {
-      "linhas": 1354,
+      "linhas": 864,
       "colunas": 24,
-      "pacientes": 52,
+      "pacientes": 48,
       "linhas_sem_id": 0,
       "linhas_duplicadas": 0,
-      "missing_values": 605,
-      "missing_percentual": 1.8617676021664205,
-      "linhas_com_missing": 593,
-      "pacientes_com_missing": 30,
+      "missing_values": 377,
+      "missing_percentual": 1.8180941358024691,
+      "linhas_com_missing": 371,
+      "pacientes_com_missing": 26,
       "por_coluna": {
         "id": {
           "tipo": "int64",
@@ -791,8 +791,8 @@
         },
         "m155": {
           "tipo": "float64",
-          "missing_values": 8,
-          "missing_percentual": 0.5908419497784343
+          "missing_values": 6,
+          "missing_percentual": 0.6944444444444444
         },
         "age": {
           "tipo": "int64",
@@ -831,8 +831,8 @@
         },
         "ifc": {
           "tipo": "float64",
-          "missing_values": 11,
-          "missing_percentual": 0.8124076809453471
+          "missing_values": 6,
+          "missing_percentual": 0.6944444444444444
         },
         "dage": {
           "tipo": "int64",
@@ -841,8 +841,8 @@
         },
         "cisq": {
           "tipo": "float64",
-          "missing_values": 560,
-          "missing_percentual": 41.3589364844904
+          "missing_values": 365,
+          "missing_percentual": 42.245370370370374
         },
         "dyl": {
           "tipo": "float64",
@@ -851,8 +851,8 @@
         },
         "lym": {
           "tipo": "float64",
-          "missing_values": 25,
-          "missing_percentual": 1.8463810930576072
+          "missing_values": 0,
+          "missing_percentual": 0.0
         },
         "oifc": {
           "tipo": "int64",
@@ -866,8 +866,8 @@
         },
         "bkv": {
           "tipo": "float64",
-          "missing_values": 1,
-          "missing_percentual": 0.07385524372230429
+          "missing_values": 0,
+          "missing_percentual": 0.0
         },
         "dm": {
           "tipo": "int64",
@@ -897,9 +897,9 @@
       }
     },
     "clean_processed": {
-      "linhas": 761,
+      "linhas": 493,
       "colunas": 24,
-      "pacientes": 27,
+      "pacientes": 26,
       "linhas_sem_id": 0,
       "linhas_duplicadas": 0,
       "missing_values": 0,
@@ -1032,12 +1032,12 @@
   },
   "comparacao_com_lr_input": {
     "full_processed": {
-      "linhas_removidas": 171,
-      "pacientes_removidos": 6
+      "linhas_removidas": 661,
+      "pacientes_removidos": 10
     },
     "clean_processed": {
-      "linhas_removidas": 764,
-      "pacientes_removidos": 31
+      "linhas_removidas": 1032,
+      "pacientes_removidos": 32
     }
   }
 }

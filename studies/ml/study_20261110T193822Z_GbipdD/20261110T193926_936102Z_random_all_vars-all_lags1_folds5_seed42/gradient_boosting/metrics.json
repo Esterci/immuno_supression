@@ -1,0 +1,10 @@
+{
+  "rmse": 3.3962517167736808,
+  "mae": 1.7672465714690915,
+  "r2": 0.7819572111349384,
+  "mape_percent_nonzero": 8.010126202259906,
+  "mape_excluded_zeros": 0,
+  "model": "gradient_boosting",
+  "cv_r2": 0.7627995455939375,
+  "fit_seconds": 2.307171117998223
+}

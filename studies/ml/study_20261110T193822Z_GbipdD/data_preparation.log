@@ -1,0 +1,54 @@
+============================================================
+INICIANDO PREPARAÇÃO DOS DADOS
+============================================================
+
+[1/6] Lendo bases de dados...
+  lr_input carregado: 1525 linhas | 58 pacientes
+  MPA carregado: 1527 linhas | 56 pacientes
+  Tacrolimus carregado: 1596 linhas | 58 pacientes
+
+[2/6] Realizando merge das bases...
+  Associando dados de Tacrolimus...
+  Associando dados de MPA...
+  Merge concluído: 620 linhas x 27 colunas
+
+[3/6] Tratando flags e valores ausentes...
+  NaNs em dv antes: 1
+  NaNs em dv_map antes: 47
+  Propagando dados estáticos dentro de cada paciente...
+  Tratamento das flags concluído.
+
+[4/6] Interpolando séries temporais...
+  NaNs antes da interpolação:
+    dv_map (pchip): 226
+    dv_tac (pchip): 280
+    gf (pchip): 0
+    lym (linear): 22
+    m155 (temporal_regression_quadratic): 17
+    wgt (linear): 0
+  NaNs após interpolação:
+    dv_map (pchip): 31
+    dv_tac (pchip): 0
+    gf (pchip): 0
+    lym (linear): 5
+    m155 (temporal_regression_quadratic): 7
+    wgt (linear): 0
+  Pacientes sem nenhum valor de dv_map: 3
+    IDs: [20, 46, 54]
+  Pacientes sem nenhum valor de dv_tac: 0
+  Após remoção: 589 linhas | 43 pacientes
+
+[5/6] Criando base limpa...
+  Linhas antes: 589
+  Linhas depois: 341
+  Linhas removidas: 248
+  Pacientes restantes: 24
+
+[6/6] Salvando bases em formato Parquet...
+  Salvo: data/full_processed.parquet (589 linhas)
+  Salvo: data/clean_processed.parquet (341 linhas)
+  Metadados salvos: data/data_preparation_metadata.json
+
+============================================================
+PREPARAÇÃO DOS DADOS CONCLUÍDA
+============================================================

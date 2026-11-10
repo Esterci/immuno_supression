@@ -99,7 +99,7 @@ def exclude_occ5(data):
     """Exclui a ocasião 5 antes de qualquer merge, preenchimento ou interpolação."""
     if "occ" not in data.columns:
         raise ValueError("Coluna occ obrigatória para excluir OCC = 5")
-    return data.loc[pd.to_numeric(data["occ"], errors="raise") != 5].copy()
+    return data.loc[pd.to_numeric(data["occ"], errors="raise") > 1].copy()
 
 
 def merge_db(lr_input_df, mpa_df, tacrolimus_df):
