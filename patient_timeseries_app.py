@@ -250,7 +250,7 @@ def patient_clinical_summary(patient_id: int) -> html.Div:
         )
 
     cards = [status_card(label, value) for label, value in statuses]
-    cards.append(status_card("Função renal mais recente", renal_value, renal_detail))
+    
     return html.Div(
         [
             html.H3(
