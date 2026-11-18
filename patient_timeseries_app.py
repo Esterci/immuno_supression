@@ -1,0 +1,797 @@
+"""Dash viewer for the original longitudinal patient measurements.
+
+Run from the repository root with::
+
+    python patient_timeseries_app.py
+"""
+
+from __future__ import annotations
+
+import argparse
+import contextlib
+import io
+import inspect
+import json
+import runpy
+from datetime import datetime
+from functools import lru_cache
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+from dash import MATCH, Dash, Input, Output, State, dcc, html
+
+from data_preparation import merge_db, normalizar_colunas, translating_flags
+
+
+ROOT = Path(__file__).resolve().parent
+DATA_DIR = ROOT / "data"
+
+
+def call_merge_db(merge_function, frames: list[pd.DataFrame]) -> pd.DataFrame:
+    """Call current or archived merge_db signatures."""
+    if len(inspect.signature(merge_function).parameters) >= 4:
+        return merge_function(*frames, occ=1)
+    return merge_function(*frames)
+
+
+def load_data(data_dir: Path = DATA_DIR) -> dict[str, pd.DataFrame]:
+    """Load original, merged and interpolated datasets used by the viewer."""
+    paths = {
+        "tacrolimus": data_dir / "tacrolimus.parquet",
+        "mpa": data_dir / "mpa.parquet",
+        "mir155": data_dir / "lr_input.parquet",
+    }
+    missing = [str(path) for path in paths.values() if not path.exists()]
+    if missing:
+        raise FileNotFoundError(
+            f"Arquivos de dados não encontrados: {', '.join(missing)}"
+        )
+    data = {name: pd.read_parquet(path) for name, path in paths.items()}
+
+    normalized = {
+        name: normalizar_colunas(frame)
+        .sort_values(["time", "id"])
+        .reset_index(drop=True)
+        for name, frame in data.items()
+    }
+    merge_inputs = [normalized["mir155"], normalized["mpa"], normalized["tacrolimus"]]
+    data["merged"] = translating_flags(
+        call_merge_db(merge_db, merge_inputs)
+    ).sort_values(["id", "time"])
+
+    interpolated_path = data_dir / "full_processed.parquet"
+    if not interpolated_path.exists():
+        raise FileNotFoundError(f"Arquivo de dados não encontrado: {interpolated_path}")
+    data["interpolated"] = pd.read_parquet(interpolated_path).sort_values(
+        ["id", "time"]
+    )
+    return data
+
+
+DATA = load_data()
+PATIENT_IDS = sorted(
+    {
+        int(patient_id)
+        for frame in (DATA["tacrolimus"], DATA["mpa"], DATA["mir155"])
+        for patient_id in frame["#ID"].dropna().unique()
+    }
+)
+
+STUDY_SOURCES = {
+    str(path.parent.parent.relative_to(ROOT)): path
+    for path in sorted((ROOT / "studies").glob("**/source/data_preparation.py"))
+}
+
+
+SERIES = {
+    "tac_concentration": "Tacrolimo — concentração (ng/mL)",
+    "tac_dose": "Tacrolimo — dose (mg)",
+    "mpa_concentration": "MPA — concentração (µg/mL)",
+    "mpa_dose": "MPA — dose (mg equivalentes)",
+    "mir155": "miR-155-5p — expressão relativa",
+    "lymphocytes": "Linfócitos (LYM)",
+    "weight": "Peso corporal (kg)",
+    "renal_function": "Função renal — GF (mL/min)",
+    "infection": "Infecção geral (IFC)",
+    "other_infection": "Outras infecções (OIFC)",
+    "cmv_infection": "Citomegalovírus (CMV)",
+    "bkv_infection": "BK vírus (BKV)",
+}
+
+STAGES = {
+    "original": "Original",
+    "merged": "Após o merge",
+    "interpolated": "Após a interpolação",
+}
+
+BINARY_SERIES = {"infection", "other_infection", "cmv_infection", "bkv_infection"}
+
+
+def format_study_date(value: str | None) -> str:
+    if not value:
+        return "não informada"
+    try:
+        if value.endswith("Z") and "_" in value:
+            parsed = datetime.strptime(value, "%Y%m%dT%H%M%S_%fZ").replace(
+                tzinfo=ZoneInfo("UTC")
+            )
+        else:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed.astimezone(ZoneInfo("America/Sao_Paulo")).strftime(
+            "%d/%m/%Y às %H:%M"
+        )
+    except ValueError:
+        return value
+
+
+def study_description(study_key: str):
+    """Create a short, human-readable description from a study metadata file."""
+    if study_key == "current":
+        metadata_path = DATA_DIR / "data_preparation_metadata.json"
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        return [
+            html.Strong("Pipeline atual. "),
+            html.Span(
+                f"Dados gerados em {format_study_date(metadata.get('gerado_em_utc'))}. "
+                "Não é uma execução de ML, portanto número de lags e folds não se aplicam."
+            ),
+        ]
+
+    metadata_path = ROOT / study_key / "metadata.json"
+    if not metadata_path.exists():
+        return "Metadados não disponíveis para este estudo."
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    config = metadata.get("config") or {}
+    started = format_study_date(metadata.get("started_at_utc"))
+    details = [f"Data: {started}"]
+
+    if config:
+        details.extend(
+            [
+                f"lags: {config.get('lags', 'não informado')}",
+                f"folds: {config.get('folds', 'não informado')}",
+                f"busca: {config.get('search', 'não informada')}",
+                f"normalização: {config.get('normalization', 'não informada')}",
+                f"modo de variáveis: {config.get('var_mode', 'não informado')}",
+            ]
+        )
+    else:
+        protocol = metadata.get("protocol") or {}
+        details.extend(
+            [
+                "tipo: estudo de interpolação",
+                f"observações mínimas: {protocol.get('min_observations', 'não informado')}",
+                f"séries avaliadas: {len(metadata.get('series') or [])}",
+                "lags: não se aplica",
+            ]
+        )
+    return [
+        html.Strong(f"{Path(study_key).name}. "),
+        html.Span("; ".join(details) + "."),
+    ]
+
+
+def binary_patient_status(patient_id: int, column: str) -> str:
+    """Summarize whether a binary event occurred in any original dataset."""
+    values = []
+    for frame in (DATA["mir155"], DATA["tacrolimus"], DATA["mpa"]):
+        if column not in frame.columns:
+            continue
+        patient_values = pd.to_numeric(
+            frame.loc[frame["#ID"] == patient_id, column], errors="coerce"
+        )
+        values.extend(patient_values.dropna().loc[patient_values.ne(9999)].tolist())
+    if not values:
+        return "Sem informação"
+    return "Sim" if any(value == 1 for value in values) else "Não"
+
+
+def renal_function_summary(patient_id: int) -> tuple[str, str]:
+    """Return the latest valid GF value and its quantitative interpretation."""
+    frame = DATA["mir155"]
+    patient = frame.loc[frame["#ID"] == patient_id, ["TIME", "GF"]].copy()
+    patient["GF"] = pd.to_numeric(patient["GF"], errors="coerce")
+    patient = patient.loc[patient["GF"].notna() & patient["GF"].ne(9999)]
+    if patient.empty:
+        return "Sem informação", "Nenhum valor válido de GF"
+
+    latest = patient.sort_values("TIME").iloc[-1]
+    value = float(latest["GF"])
+    if value < 15:
+        category = "falência renal/estágio terminal"
+    elif value < 30:
+        category = "redução grave"
+    elif value < 60:
+        category = "redução moderada"
+    elif value < 90:
+        category = "redução leve"
+    else:
+        category = "função ≥ 90 mL/min"
+    return f"{value:g} mL/min", f"{category}; avaliação em {latest['TIME']:.2f} h"
+
+
+def patient_clinical_summary(patient_id: int) -> html.Div:
+    statuses = [
+        ("Rejeição aguda", binary_patient_status(patient_id, "AR")),
+        ("Infecção geral", binary_patient_status(patient_id, "IFC")),
+        ("Outras infecções", binary_patient_status(patient_id, "OIFC")),
+        ("Diabetes mellitus", binary_patient_status(patient_id, "DM")),
+        ("BK vírus", binary_patient_status(patient_id, "BKV")),
+        ("Citomegalovírus", binary_patient_status(patient_id, "CMV")),
+    ]
+    renal_value, renal_detail = renal_function_summary(patient_id)
+
+    def status_card(label: str, value: str, detail: str | None = None) -> html.Div:
+        color = "#b91c1c" if value == "Sim" else "#166534"
+        if value == "Sem informação":
+            color = "#64748b"
+        return html.Div(
+            [
+                html.Div(label, style={"fontSize": "0.82rem", "color": "#64748b"}),
+                html.Div(
+                    value,
+                    style={"fontSize": "1.1rem", "fontWeight": 700, "color": color},
+                ),
+                (
+                    html.Div(detail, style={"fontSize": "0.78rem", "color": "#64748b"})
+                    if detail
+                    else None
+                ),
+            ],
+            style={
+                "border": "1px solid #e2e8f0",
+                "borderRadius": "9px",
+                "padding": "10px 12px",
+                "backgroundColor": "#f8fafc",
+            },
+        )
+
+    cards = [status_card(label, value) for label, value in statuses]
+    
+    return html.Div(
+        [
+            html.H3(
+                f"Situação clínica — paciente {patient_id}",
+                style={"margin": "4px 0 12px"},
+            ),
+            html.Div(
+                cards,
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "repeat(auto-fit, minmax(180px, 1fr))",
+                    "gap": "9px",
+                },
+            ),
+            html.P(
+                "“Sim” indica ao menos um registro positivo durante o acompanhamento; "
+                "não representa necessariamente a situação clínica atual.",
+                style={"fontSize": "0.78rem", "color": "#64748b", "marginBottom": 0},
+            ),
+        ]
+    )
+
+
+@lru_cache(maxsize=None)
+def load_study_pipeline(study_key: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Rebuild a study pipeline from its archived source and current raw inputs."""
+    if study_key == "current":
+        return DATA["merged"], DATA["interpolated"]
+    source = STUDY_SOURCES[study_key]
+    with contextlib.redirect_stdout(io.StringIO()):
+        namespace = runpy.run_path(str(source))
+        raw_frames = [DATA["mir155"], DATA["mpa"], DATA["tacrolimus"]]
+        normalized = [
+            namespace["normalizar_colunas"](frame)
+            .sort_values(["time", "id"])
+            .reset_index(drop=True)
+            for frame in raw_frames
+        ]
+        merged = namespace["translating_flags"](
+            call_merge_db(namespace["merge_db"], normalized)
+        ).sort_values(["id", "time"])
+        interpolated = namespace["ts_interpolation"](merged.copy()).sort_values(
+            ["id", "time"]
+        )
+    return merged, interpolated
+
+
+def empty_figure(
+    title: str, message: str = "Sem observações para este paciente"
+) -> go.Figure:
+    figure = go.Figure()
+    figure.add_annotation(
+        text=message, x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False
+    )
+    return style_figure(figure, title, "")
+
+
+def style_figure(figure: go.Figure, title: str, y_title: str) -> go.Figure:
+    figure.update_layout(
+        title={"text": title, "x": 0.02},
+        template="plotly_white",
+        height=430,
+        margin={"l": 65, "r": 25, "t": 65, "b": 55},
+        hovermode="x unified",
+        xaxis_title="Tempo desde o transplante (horas)",
+        yaxis_title=y_title,
+        legend_title_text="Etapa",
+    )
+    figure.update_xaxes(
+        showspikes=True,
+        spikemode="across",
+        rangeslider_visible=True,
+        rangemode="tozero",
+    )
+    return figure
+
+
+def original_patient_series(patient_id: int) -> dict[str, pd.DataFrame]:
+    """Prepare concentrations, recorded doses and biomarker values for a patient."""
+    tac = DATA["tacrolimus"]
+    mpa = DATA["mpa"]
+    mir = DATA["mir155"]
+
+    tac_observations = tac.loc[
+        (tac["#ID"] == patient_id) & (tac["MDV"] == 0) & (tac["EVID"] == 0)
+    ].copy()
+    tac_observations["VALUE"] = np.exp(tac_observations["DV"])
+
+    mpa_observations = mpa.loc[
+        (mpa["#ID"] == patient_id) & (mpa["MDV"] == 0) & (mpa["EVID"] == 0)
+    ].copy()
+    mpa_observations["VALUE"] = mpa_observations["DV"]
+
+    tac_doses = tac.loc[
+        (tac["#ID"] == patient_id) & (tac["EVID"] == 1) & (tac["AMT"] > 0)
+    ].copy()
+    tac_doses["VALUE"] = tac_doses["AMT"]
+
+    mpa_doses = mpa.loc[
+        (mpa["#ID"] == patient_id) & (mpa["EVID"] == 1) & (mpa["AMT"] > 0)
+    ].copy()
+    mpa_doses["VALUE"] = mpa_doses["AMT"]
+
+    mir_observations = mir.loc[
+        (mir["#ID"] == patient_id)
+        & mir["M155"].notna()
+        & (mir["M155"] > 0)
+        & (mir["M155"] != 9999)
+    ].copy()
+    mir_observations["VALUE"] = mir_observations["M155"]
+
+    lymphocyte_observations = mir.loc[
+        (mir["#ID"] == patient_id) & mir["LYM"].notna() & (mir["LYM"] != 9999)
+    ].copy()
+    lymphocyte_observations["VALUE"] = lymphocyte_observations["LYM"]
+
+    weight_observations = mir.loc[
+        (mir["#ID"] == patient_id)
+        & mir["WGT"].notna()
+        & (mir["WGT"] != 9999)
+    ].copy()
+    weight_observations["VALUE"] = weight_observations["WGT"]
+
+    renal_observations = mir.loc[
+        (mir["#ID"] == patient_id)
+        & mir["GF"].notna()
+        & (mir["GF"] != 9999)
+    ].copy()
+    renal_observations["VALUE"] = renal_observations["GF"]
+
+    def binary_observations(column: str) -> pd.DataFrame:
+        observations = mir.loc[
+            (mir["#ID"] == patient_id)
+            & mir[column].notna()
+            & (mir[column] != 9999)
+        ].copy()
+        observations["VALUE"] = observations[column]
+        return observations.sort_values("TIME")
+
+    return {
+        "tac_concentration": tac_observations.sort_values("TIME"),
+        "tac_dose": tac_doses.sort_values("TIME"),
+        "mpa_concentration": mpa_observations.sort_values("TIME"),
+        "mpa_dose": mpa_doses.sort_values("TIME"),
+        "mir155": mir_observations.sort_values("TIME"),
+        "lymphocytes": lymphocyte_observations.sort_values("TIME"),
+        "weight": weight_observations.sort_values("TIME"),
+        "renal_function": renal_observations.sort_values("TIME"),
+        "infection": binary_observations("IFC"),
+        "other_infection": binary_observations("OIFC"),
+        "cmv_infection": binary_observations("CMV"),
+        "bkv_infection": binary_observations("BKV"),
+    }
+
+
+def processed_patient_series(
+    frame: pd.DataFrame, patient_id: int
+) -> dict[str, pd.DataFrame]:
+    """Convert a merged/pipeline frame to the same visual series as the raw data."""
+    patient = frame.loc[frame["id"] == patient_id].copy()
+
+    def make_series(column: str, *, positive: bool = False, exponentiate: bool = False):
+        selected = patient.loc[patient[column].notna(), ["time", column]].copy()
+        if positive:
+            selected = selected.loc[selected[column] > 0]
+        selected["VALUE"] = (
+            np.exp(selected[column]) if exponentiate else selected[column]
+        )
+        return selected.rename(columns={"time": "TIME"})[["TIME", "VALUE"]]
+
+    return {
+        "tac_concentration": make_series("dv_tac", exponentiate=True),
+        "tac_dose": make_series("amt_tac", positive=True),
+        "mpa_concentration": make_series("dv_map"),
+        "mpa_dose": make_series("amt_map", positive=True),
+        "mir155": make_series("m155", positive=True),
+        "lymphocytes": make_series("lym"),
+        "weight": make_series("wgt"),
+        "renal_function": make_series("gf"),
+        "infection": make_series("ifc"),
+        "other_infection": make_series("oifc"),
+        "cmv_infection": make_series("cmv"),
+        "bkv_infection": make_series("bkv"),
+    }
+
+
+def series_by_stage(
+    patient_id: int, series_key: str, study_key: str
+) -> dict[str, pd.DataFrame]:
+    merged, interpolated = load_study_pipeline(study_key)
+    original = original_patient_series(patient_id)[series_key].copy()
+    after_merge = processed_patient_series(merged, patient_id)[series_key].copy()
+    after_interpolation = processed_patient_series(interpolated, patient_id)[
+        series_key
+    ].copy()
+
+    def mark_added(frame: pd.DataFrame, previous: pd.DataFrame) -> pd.DataFrame:
+        frame = frame.copy()
+        previous_times = set(previous["TIME"].round(6))
+        frame["ADDED"] = ~frame["TIME"].round(6).isin(previous_times)
+        return frame
+
+    original["ADDED"] = False
+    return {
+        "original": original,
+        "merged": mark_added(after_merge, original),
+        "interpolated": mark_added(after_interpolation, after_merge),
+    }
+
+
+def original_figure(
+    patient_id: int, selected_series: list[str] | None, plot_type: str
+) -> go.Figure:
+    frames = original_patient_series(patient_id)
+    selected_series = selected_series or []
+    if not selected_series:
+        return empty_figure("Séries temporais originais", "Selecione uma série")
+
+    colors = {
+        "tac_concentration": "#2563eb",
+        "tac_dose": "#60a5fa",
+        "mpa_concentration": "#dc2626",
+        "mpa_dose": "#fb7185",
+        "mir155": "#7c3aed",
+        "lymphocytes": "#059669",
+        "weight": "#a16207",
+        "renal_function": "#0891b2",
+        "infection": "#be123c",
+        "other_infection": "#c2410c",
+        "cmv_infection": "#9333ea",
+        "bkv_infection": "#4f46e5",
+    }
+    figure = go.Figure()
+    for series_key in selected_series:
+        if series_key not in frames or frames[series_key].empty:
+            continue
+        frame = frames[series_key]
+        figure.add_trace(
+            go.Scatter(
+                x=frame["TIME"],
+                y=frame["VALUE"],
+                mode="markers" if plot_type == "scatter" else "lines+markers",
+                name=SERIES[series_key],
+                marker={"size": 8, "color": colors[series_key], "opacity": 0.82},
+                hovertemplate=(
+                    f"{SERIES[series_key]}<br>Tempo: %{{x:.2f}} h"
+                    "<br>Valor: %{y:.4g}<extra></extra>"
+                ),
+            )
+        )
+    if not figure.data:
+        return empty_figure("Séries temporais originais")
+    figure = style_figure(
+        figure, "Séries temporais originais", "Valor na unidade original"
+    )
+    maximum_time = max(max(trace.x) for trace in figure.data)
+    figure.update_xaxes(range=[0, maximum_time * 1.02 if maximum_time > 0 else 1])
+    return figure
+
+
+def series_figure(
+    patient_id: int,
+    series_key: str,
+    selected_stages: list[str] | None,
+    plot_type: str,
+    study_key: str,
+) -> go.Figure:
+    selected_stages = selected_stages or []
+    if not selected_stages:
+        return empty_figure(SERIES[series_key], "Selecione pelo menos uma etapa")
+
+    colors = {"original": "#2563eb", "merged": "#f59e0b", "interpolated": "#059669"}
+    symbols = {"original": "circle", "merged": "diamond", "interpolated": "cross"}
+    stage_frames = series_by_stage(patient_id, series_key, study_key)
+    figure = go.Figure()
+    for stage in selected_stages:
+        if stage not in STAGES:
+            continue
+        frame = stage_frames[stage]
+        if frame.empty:
+            continue
+        point_status = np.where(
+            frame["ADDED"], "Adicionado nesta etapa", "Já existente na etapa anterior"
+        )
+        figure.add_trace(
+            go.Scatter(
+                x=frame["TIME"],
+                y=frame["VALUE"],
+                mode="markers" if plot_type == "scatter" else "lines+markers",
+                name=STAGES[stage],
+                marker={
+                    "size": 8,
+                    "color": colors[stage],
+                    "symbol": symbols[stage],
+                    "opacity": 0.8,
+                },
+                customdata=point_status,
+                hovertemplate=(
+                    f"{STAGES[stage]}<br>Tempo: %{{x:.2f}} h"
+                    "<br>Valor: %{y:.4g}<br>%{customdata}<extra></extra>"
+                ),
+            )
+        )
+        added = frame.loc[frame["ADDED"]]
+        if not added.empty:
+            figure.add_trace(
+                go.Scatter(
+                    x=added["TIME"],
+                    y=added["VALUE"],
+                    mode="markers",
+                    name=f"{STAGES[stage]} — pontos adicionados",
+                    marker={
+                        "size": 8,
+                        "color": colors[stage],
+                        "symbol": "star",
+                        "line": {"color": "#0f172a", "width": 1.5},
+                    },
+                    hovertemplate=(
+                        f"{STAGES[stage]} — adicionado"
+                        "<br>Tempo: %{x:.2f} h"
+                        "<br>Valor: %{y:.4g}<extra></extra>"
+                    ),
+                )
+            )
+    if not figure.data:
+        return empty_figure(SERIES[series_key])
+    figure = style_figure(figure, SERIES[series_key], "Valor")
+    maximum_time = max(max(trace.x) for trace in figure.data)
+    figure.update_xaxes(range=[0, maximum_time * 1.02 if maximum_time > 0 else 1])
+    if series_key in BINARY_SERIES:
+        figure.update_yaxes(
+            tickmode="array",
+            tickvals=[0, 1],
+            ticktext=["Não", "Sim"],
+            range=[-0.1, 1.1],
+        )
+    return figure
+
+
+app = Dash(__name__, title="Séries temporais por paciente")
+server = app.server
+
+CARD_STYLE = {
+    "backgroundColor": "white",
+    "border": "1px solid #e2e8f0",
+    "borderRadius": "12px",
+    "boxShadow": "0 2px 8px rgba(15, 23, 42, 0.05)",
+    "padding": "8px 14px",
+}
+
+
+def series_panel(series_key: str) -> html.Div:
+    return html.Div(
+        [
+            html.Label(
+                "Etapas exibidas",
+                style={"fontWeight": 600, "display": "block", "padding": "8px 8px 0"},
+            ),
+            dcc.Dropdown(
+                id={"type": "stage-select", "series": series_key},
+                options=[
+                    {"label": label, "value": key} for key, label in STAGES.items()
+                ],
+                value=list(STAGES),
+                multi=True,
+                clearable=True,
+                placeholder="Selecione uma ou mais etapas",
+                style={"margin": "6px 8px 0"},
+            ),
+            dcc.Graph(id={"type": "series-graph", "series": series_key}),
+        ],
+        style={**CARD_STYLE, "marginTop": "14px"},
+    )
+
+
+app.layout = html.Main(
+    [
+        html.H1("Séries temporais originais", style={"marginBottom": "4px"}),
+        html.P(
+            "Visualização conjunta das medidas originais, sem merge ou interpolação.",
+            style={"color": "#475569", "marginTop": 0},
+        ),
+        html.Label("Paciente", htmlFor="patient-select", style={"fontWeight": 600}),
+        dcc.Dropdown(
+            id="patient-select",
+            options=[
+                {"label": f"Paciente {patient_id}", "value": patient_id}
+                for patient_id in PATIENT_IDS
+            ],
+            value=PATIENT_IDS[0],
+            clearable=False,
+            searchable=True,
+            style={"maxWidth": "420px", "marginTop": "6px"},
+        ),
+        html.Label(
+            "Tipo de gráfico",
+            style={"fontWeight": 600, "display": "block", "marginTop": "18px"},
+        ),
+        dcc.RadioItems(
+            id="plot-type",
+            options=[
+                {"label": " Scatter", "value": "scatter"},
+                {"label": " Linha", "value": "line"},
+            ],
+            value="scatter",
+            inline=True,
+            inputStyle={"marginLeft": "12px"},
+            style={"marginTop": "8px"},
+        ),
+        html.Div(id="patient-summary", style={**CARD_STYLE, "marginTop": "18px"}),
+        html.Label(
+            "Séries exibidas",
+            htmlFor="original-series-select",
+            style={"fontWeight": 600, "display": "block", "marginTop": "18px"},
+        ),
+        dcc.Dropdown(
+            id="original-series-select",
+            options=[{"label": label, "value": key} for key, label in SERIES.items()],
+            value=list(SERIES),
+            multi=True,
+            clearable=True,
+            placeholder="Selecione uma ou mais séries",
+            style={"marginTop": "6px"},
+        ),
+        html.Div(
+            dcc.Graph(id="original-timeseries-graph"),
+            style={**CARD_STYLE, "marginTop": "14px"},
+        ),
+        html.Hr(
+            style={"border": 0, "borderTop": "1px solid #cbd5e1", "margin": "42px 0"}
+        ),
+        html.H1("Séries temporais processadas", style={"marginBottom": "4px"}),
+        html.P(
+            "Comparação por variável entre dados originais, após o merge e após a interpolação.",
+            style={"color": "#475569", "marginTop": 0},
+        ),
+        html.P(
+            "Marcadores em forma de estrela destacam pontos acrescentados em relação "
+            "à etapa anterior.",
+            style={"color": "#475569", "marginTop": "-6px"},
+        ),
+        html.Label("Estudo", htmlFor="study-select", style={"fontWeight": 600}),
+        dcc.Dropdown(
+            id="study-select",
+            options=[
+                {"label": "Pipeline atual", "value": "current"},
+                *[
+                    {"label": study_key, "value": study_key}
+                    for study_key in STUDY_SOURCES
+                ],
+            ],
+            value="current",
+            clearable=False,
+            searchable=True,
+            style={"marginTop": "6px"},
+        ),
+        html.Div(
+            id="study-description",
+            children=study_description("current"),
+            style={
+                **CARD_STYLE,
+                "marginTop": "12px",
+                "lineHeight": "1.55",
+                "color": "#334155",
+            },
+        ),
+        html.P(
+            "Os estudos históricos são reconstruídos com o código arquivado de cada "
+            "execução e as bases originais atuais; os Parquets processados históricos "
+            "não foram armazenados.",
+            style={"color": "#64748b", "fontSize": "0.9rem"},
+        ),
+        html.Div([series_panel(series_key) for series_key in SERIES]),
+    ],
+    style={
+        "fontFamily": "system-ui, -apple-system, sans-serif",
+        "maxWidth": "1200px",
+        "margin": "28px auto",
+        "padding": "0 20px 30px",
+        "color": "#0f172a",
+        "backgroundColor": "#f8fafc",
+    },
+)
+
+
+@app.callback(
+    Output("original-timeseries-graph", "figure"),
+    Input("patient-select", "value"),
+    Input("original-series-select", "value"),
+    Input("plot-type", "value"),
+)
+def update_original_graph(
+    patient_id: int, selected_series: list[str] | None, plot_type: str
+):
+    return original_figure(int(patient_id), selected_series, plot_type)
+
+
+@app.callback(Output("study-description", "children"), Input("study-select", "value"))
+def update_study_description(study_key: str):
+    return study_description(study_key)
+
+
+@app.callback(
+    Output({"type": "series-graph", "series": MATCH}, "figure"),
+    Input("patient-select", "value"),
+    Input({"type": "stage-select", "series": MATCH}, "value"),
+    Input("plot-type", "value"),
+    Input("study-select", "value"),
+    State({"type": "stage-select", "series": MATCH}, "id"),
+)
+def update_series_graph(
+    patient_id: int,
+    selected_stages: list[str] | None,
+    plot_type: str,
+    study_key: str,
+    component_id: dict[str, str],
+):
+    return series_figure(
+        int(patient_id),
+        component_id["series"],
+        selected_stages,
+        plot_type,
+        study_key,
+    )
+
+
+@app.callback(Output("patient-summary", "children"), Input("patient-select", "value"))
+def update_patient_summary(patient_id: int):
+    return patient_clinical_summary(int(patient_id))
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--host", default="127.0.0.1", help="Interface do servidor")
+    parser.add_argument("--port", default=8050, type=int, help="Porta do servidor")
+    parser.add_argument(
+        "--debug", action="store_true", help="Ativa recarga e mensagens de depuração"
+    )
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    app.run(host=args.host, port=args.port, debug=args.debug)

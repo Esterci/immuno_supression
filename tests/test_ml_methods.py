@@ -40,9 +40,7 @@ class MLMethodsTest(unittest.TestCase):
     def test_variable_modes(self):
         raw = self.data()
         all_features, _, _ = prepare_features(raw, 2, "none", var_mode="all")
-        temporal, _, _ = prepare_features(
-            raw, 2, "none", var_mode="time-series"
-        )
+        temporal, _, _ = prepare_features(raw, 2, "none", var_mode="time-series")
         expected = {
             f"{column}_t{lag}"
             for column in ("amt_tac", "dv_tac", "amt_map", "dv_map", "time", "lym")
@@ -71,8 +69,12 @@ class MLMethodsTest(unittest.TestCase):
         for normalization in ("none", "all", "time-series"):
             for var_mode in ("all", "time-series"):
                 for lags in (0, 1, 3):
-                    with self.subTest(normalization=normalization, var_mode=var_mode, lags=lags):
-                        X, _, rows = prepare_features(self.data(), lags, normalization, var_mode)
+                    with self.subTest(
+                        normalization=normalization, var_mode=var_mode, lags=lags
+                    ):
+                        X, _, rows = prepare_features(
+                            self.data(), lags, normalization, var_mode
+                        )
                         self.assertFalse(current & set(X.columns))
                         self.assertTrue((rows.time > 0).all())
                         self.assertIn("dv_tac_t0", X.columns)
@@ -81,18 +83,24 @@ class MLMethodsTest(unittest.TestCase):
         X, y, rows = prepare_features(self.data(), 1, "all")
         train = rows.id < 6
         for kind in ("grid", "random"):
-            model, params = model_specs(quick=True)['random_forest']
+            model, params = model_specs(quick=True)["random_forest"]
             search = make_search(model, params, kind, 2, 1, 42, 1, normalization="all")
             for a, b in search.cv.split(X[train], y[train], rows[train].id):
                 fitted = clone(search.estimator).fit(X[train].iloc[a], y[train].iloc[a])
-                np.testing.assert_allclose(fitted.named_steps['scaler'].data_max_, X[train].iloc[a].max())
-                target_scaler = fitted.named_steps['model'].transformer_
-                np.testing.assert_allclose(target_scaler.data_min_, [y[train].iloc[a].min()])
-                np.testing.assert_allclose(target_scaler.data_max_, [y[train].iloc[a].max()])
+                np.testing.assert_allclose(
+                    fitted.named_steps["scaler"].data_max_, X[train].iloc[a].max()
+                )
+                target_scaler = fitted.named_steps["model"].transformer_
+                np.testing.assert_allclose(
+                    target_scaler.data_min_, [y[train].iloc[a].min()]
+                )
+                np.testing.assert_allclose(
+                    target_scaler.data_max_, [y[train].iloc[a].max()]
+                )
             search.fit(X[train], y[train], groups=rows[train].id)
-            scaler = search.best_estimator_.named_steps['scaler']
+            scaler = search.best_estimator_.named_steps["scaler"]
             np.testing.assert_allclose(scaler.data_max_, X[train].max())
-            target_scaler = search.best_estimator_.named_steps['model'].transformer_
+            target_scaler = search.best_estimator_.named_steps["model"].transformer_
             np.testing.assert_allclose(target_scaler.data_min_, [y[train].min()])
             np.testing.assert_allclose(target_scaler.data_max_, [y[train].max()])
             self.assertGreater(scaler.transform(X[~train]).amt_tac_t1.max(), 1)

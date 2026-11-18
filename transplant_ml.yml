@@ -12,6 +12,8 @@ dependencies:
   - scikit-learn
   - scipy
   - matplotlib
+  - plotly
+  - dash
   - shap>=0.46
   - joblib
   - jupyter
