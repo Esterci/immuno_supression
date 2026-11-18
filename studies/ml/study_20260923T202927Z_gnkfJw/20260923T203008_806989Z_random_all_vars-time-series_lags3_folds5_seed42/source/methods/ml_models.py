@@ -9,7 +9,11 @@ from sklearn.ensemble import (
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, GroupKFold
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
-from sklearn.compose import TransformedTargetRegressor, ColumnTransformer, make_column_selector
+from sklearn.compose import (
+    TransformedTargetRegressor,
+    ColumnTransformer,
+    make_column_selector,
+)
 
 TEMPORAL_COLUMNS = ["amt_tac", "dv_tac", "amt_map", "dv_map"]
 
@@ -39,7 +43,9 @@ def prepare_features(data, n_lags=3, normalization="all", var_mode="all"):
     lag_columns = []
     for col in [*TEMPORAL_COLUMNS, "time", "lym"]:
         # Semântica original: t0 é o primeiro valor, não o valor corrente.
-        data[f"{col}_t0"] = data.groupby("id")[col].transform(lambda values: values.iloc[0])
+        data[f"{col}_t0"] = data.groupby("id")[col].transform(
+            lambda values: values.iloc[0]
+        )
         lag_columns.append(f"{col}_t0")
         for lag in range(1, n_lags + 1):
             name = f"{col}_t{lag}"
@@ -101,7 +107,9 @@ def model_specs(seed=42, quick=False):
     return specs
 
 
-def make_search(model, params, search, folds, n_iter, seed, n_jobs, normalization="none"):
+def make_search(
+    model, params, search, folds, n_iter, seed, n_jobs, normalization="none"
+):
     if normalization not in ("all", "time-series", "none"):
         raise ValueError("normalization deve ser all, time-series ou none")
     if normalization == "all":
@@ -109,17 +117,25 @@ def make_search(model, params, search, folds, n_iter, seed, n_jobs, normalizatio
             regressor=model,
             transformer=MinMaxScaler(),
         )
-        model = Pipeline([
-            ("scaler", MinMaxScaler().set_output(transform="pandas")),
-            ("model", model),
-        ])
+        model = Pipeline(
+            [
+                ("scaler", MinMaxScaler().set_output(transform="pandas")),
+                ("model", model),
+            ]
+        )
         params = {f"model__regressor__{key}": value for key, value in params.items()}
     else:
         # Tempo e histórico do alvo sempre são normalizados, somente no treino.
         scaler = ColumnTransformer(
-            [("history", MinMaxScaler(), make_column_selector(
-                pattern=r"^(?:time|time_t[0-9]+|lym_t[0-9]+)$"
-            ))],
+            [
+                (
+                    "history",
+                    MinMaxScaler(),
+                    make_column_selector(
+                        pattern=r"^(?:time|time_t[0-9]+|lym_t[0-9]+)$"
+                    ),
+                )
+            ],
             remainder="passthrough",
             verbose_feature_names_out=False,
         ).set_output(transform="pandas")

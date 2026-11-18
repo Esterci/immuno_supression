@@ -68,9 +68,7 @@ METHODS: dict[str, Callable[[np.ndarray, np.ndarray, float], float]] = {
 }
 
 
-def _observed_unique_times(
-    data: pd.DataFrame, series: str
-) -> tuple[pd.DataFrame, int]:
+def _observed_unique_times(data: pd.DataFrame, series: str) -> tuple[pd.DataFrame, int]:
     selected = data.loc[:, ["id", "time", series]].copy()
     selected["time"] = pd.to_numeric(selected["time"], errors="coerce")
     selected[series] = pd.to_numeric(selected[series], errors="coerce")
@@ -233,8 +231,7 @@ def calculate_metrics(
         )
 
     macro = pd.DataFrame(rows).sort_values(["series", "rmse", "mae", "method"])
-    macro["rank_rmse"] = macro.groupby("series")["rmse"].rank(
-        method="min", ascending=True
-    ).astype(int)
+    macro["rank_rmse"] = (
+        macro.groupby("series")["rmse"].rank(method="min", ascending=True).astype(int)
+    )
     return patient, macro
-

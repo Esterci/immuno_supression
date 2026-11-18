@@ -38,8 +38,16 @@ def temporal_plot(predictions, metrics, model, output):
     fig, axes = plt.subplots(2, 1, figsize=(12, 8), constrained_layout=True)
     for axis, (label, result) in zip(axes, selected):
         patient = predictions[predictions["id"] == result["id"]].sort_values("time")
-        axis.plot(patient["time"], patient["observed"], "o-", label="LYM real", linewidth=2)
-        axis.plot(patient["time"], patient["predicted"], "s--", label="LYM previsto", linewidth=2)
+        axis.plot(
+            patient["time"], patient["observed"], "o-", label="LYM real", linewidth=2
+        )
+        axis.plot(
+            patient["time"],
+            patient["predicted"],
+            "s--",
+            label="LYM previsto",
+            linewidth=2,
+        )
         axis.set_title(
             f"{label} paciente — ID {result['id']:g} | "
             f"RMSE={result['rmse']:.3f} | MAE={result['mae']:.3f} | n={int(result['observations'])}"
@@ -66,7 +74,9 @@ def analyze(experiment, require_complete=True):
         predictions = pd.read_csv(experiment / model / "predictions.csv")
         required = {"id", "time", "observed", "predicted"}
         if missing := required - set(predictions.columns):
-            raise ValueError(f"{model}: colunas ausentes em predictions.csv: {sorted(missing)}")
+            raise ValueError(
+                f"{model}: colunas ausentes em predictions.csv: {sorted(missing)}"
+            )
         metrics = patient_metrics(predictions)
         metrics.to_csv(output / f"{model}_metrics_by_patient.csv", index=False)
         best, worst = temporal_plot(

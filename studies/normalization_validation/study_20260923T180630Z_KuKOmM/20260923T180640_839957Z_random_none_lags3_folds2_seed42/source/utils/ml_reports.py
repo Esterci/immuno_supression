@@ -83,9 +83,7 @@ def shap_report(
             return model.predict(pd.DataFrame(values, columns=X_train.columns))
 
         explainer = shap.PermutationExplainer(predict, reference, seed=seed)
-        return explainer(
-            explained, max_evals=permutations * (2 * X_train.shape[1] + 1)
-        )
+        return explainer(explained, max_evals=permutations * (2 * X_train.shape[1] + 1))
 
     if name == "adaboost":
         explanation = permutation_explanation()
@@ -98,12 +96,16 @@ def shap_report(
             explanation = explainer(explained)
             np.testing.assert_allclose(
                 explanation.base_values + explanation.values.sum(axis=1),
-                prediction, rtol=1e-4, atol=1e-5,
+                prediction,
+                rtol=1e-4,
+                atol=1e-5,
             )
             algorithm = "tree_interventional"
         except (AssertionError, shap.utils._exceptions.ExplainerError) as error:
             fallback_reason = f"{type(error).__name__}: {error}"
-            print("  TreeSHAP falhou na verificação de aditividade; usando PermutationExplainer.")
+            print(
+                "  TreeSHAP falhou na verificação de aditividade; usando PermutationExplainer."
+            )
             explanation = permutation_explanation()
             algorithm = "permutation"
     importance = pd.DataFrame(

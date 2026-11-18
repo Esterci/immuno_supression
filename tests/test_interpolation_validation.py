@@ -32,13 +32,9 @@ class InterpolationValidationTest(unittest.TestCase):
             }
         )
         predictions, _ = run_patient_loocv(frame, ["test"])
-        held_maximum = predictions.loc[
-            predictions.id.eq(1) & predictions.time.eq(2.0)
-        ]
+        held_maximum = predictions.loc[predictions.id.eq(1) & predictions.time.eq(2.0)]
         self.assertTrue(held_maximum.scale_max.eq(4.0).all())
-        self.assertTrue(
-            held_maximum.normalization.eq("patient-train-minmax").all()
-        )
+        self.assertTrue(held_maximum.normalization.eq("patient-train-minmax").all())
 
     def test_macro_metrics_give_each_patient_equal_weight(self):
         rows = []
@@ -83,4 +79,3 @@ class InterpolationValidationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

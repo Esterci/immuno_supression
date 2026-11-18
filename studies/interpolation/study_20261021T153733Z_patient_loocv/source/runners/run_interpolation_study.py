@@ -86,7 +86,10 @@ def make_study_dir(base: Path, requested_name: str | None) -> Path:
 def save_metric_plot(macro: pd.DataFrame, target: Path) -> None:
     series_names = macro["series"].drop_duplicates().tolist()
     fig, axes = plt.subplots(
-        len(series_names), 1, figsize=(11, max(4, 3.2 * len(series_names))), squeeze=False
+        len(series_names),
+        1,
+        figsize=(11, max(4, 3.2 * len(series_names))),
+        squeeze=False,
     )
     for axis, series in zip(axes[:, 0], series_names):
         subset = macro.loc[macro["series"].eq(series)].sort_values("rmse")
@@ -252,4 +255,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

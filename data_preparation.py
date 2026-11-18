@@ -10,7 +10,6 @@ import numpy as np
 
 from methods.interpolation import METHODS, SERIES_VALIDITY_RULES
 
-
 # Vencedores de studies/interpolation/study_20261021T153733Z_patient_loocv/
 # best_methods.csv. Mantenha a escolha explícita para facilitar estudos futuros.
 INTERPOLATION_METHODS = {
@@ -95,20 +94,16 @@ def read_data():
 # ---------------------------------------------------------
 
 
-def exclude_occ5(data):
+def select_occ5(data, occ=1):
     """Exclui a ocasião 5 antes de qualquer merge, preenchimento ou interpolação."""
     if "occ" not in data.columns:
         raise ValueError("Coluna occ obrigatória para excluir OCC = 5")
-    return data.loc[pd.to_numeric(data["occ"], errors="raise") > 1].copy()
+    return data.loc[pd.to_numeric(data["occ"], errors="raise") == occ].copy()
 
 
-def merge_db(lr_input_df, mpa_df, tacrolimus_df):
+def soft_merge_db(lr_input_df, mpa_df, tacrolimus_df, occ):
 
     print("\n[2/6] Realizando merge das bases...")
-
-    lr_input_df, mpa_df, tacrolimus_df = (
-        exclude_occ5(frame) for frame in (lr_input_df, mpa_df, tacrolimus_df)
-    )
 
     print("  Associando dados de Tacrolimus...")
 
@@ -145,6 +140,41 @@ def merge_db(lr_input_df, mpa_df, tacrolimus_df):
     return df_merge
 
 
+def merge_db(lr_input_df, mpa_df, tacrolimus_df, occ):
+
+    print("\n[2/6] Realizando merge das bases...")
+
+    print("  Associando dados de Tacrolimus...")
+
+    df_merge = pd.merge(
+        lr_input_df,
+        tacrolimus_df[["id", "time", "amt", "dv", "mdv"]],
+        on=["id", "time"],
+        how="outer",
+        suffixes=("", "_tac"),
+    )
+
+    print("  Associando dados de MPA...")
+
+    df_merge = pd.merge(
+        df_merge,
+        mpa_df[["id", "time", "amt", "dv", "mdv"]],
+        on=["id", "time"],
+        how="outer",
+        suffixes=("", "_map"),
+    )
+
+    df_merge = df_merge.drop(columns=["occ", "imc", "ar", "nta"])
+
+    print(
+        f"  Merge concluído: "
+        f"{df_merge.shape[0]} linhas x "
+        f"{df_merge.shape[1]} colunas"
+    )
+
+    return df_merge
+
+
 # ---------------------------------------------------------
 # Tratamento das flags
 # ---------------------------------------------------------
@@ -155,7 +185,7 @@ def translating_flags(merged_df):
     print("\n[3/6] Tratando flags e valores ausentes...")
 
     # Valores antes do tratamento
-    print(f"  NaNs em dv antes: {merged_df['dv'].isna().sum()}")
+    print(f"  NaNs em dv (trac) antes: {merged_df['dv'].isna().sum()}")
     print(f"  NaNs em dv_map antes: {merged_df['dv_map'].isna().sum()}")
 
     # Colocando NaN com base nas colunas de labels
@@ -211,9 +241,11 @@ def _interpolate_patient_series(patient, column, method_name):
     """Interpola lacunas internas e completa bordas pelo valor mais próximo."""
     result = pd.to_numeric(patient[column], errors="coerce").copy()
     times = pd.to_numeric(patient["time"], errors="coerce")
-    observed = pd.DataFrame({"time": times, "value": result}).replace(
-        [np.inf, -np.inf], np.nan
-    ).dropna()
+    observed = (
+        pd.DataFrame({"time": times, "value": result})
+        .replace([np.inf, -np.inf], np.nan)
+        .dropna()
+    )
     if SERIES_VALIDITY_RULES.get(column) == "strictly_positive":
         observed = observed.loc[observed["value"] > 0]
     observed = observed.groupby("time", as_index=False)["value"].mean()
@@ -227,17 +259,13 @@ def _interpolate_patient_series(patient, column, method_name):
     result.loc[valid_missing & times.le(float(x.min()))] = y[0]
     result.loc[valid_missing & times.ge(float(x.max()))] = y[-1]
 
-    minimum_observations = (
-        3 if method_name == "temporal_regression_quadratic" else 2
-    )
+    minimum_observations = 3 if method_name == "temporal_regression_quadratic" else 2
     if len(observed) < minimum_observations:
         return result
 
     estimator = METHODS[method_name]
     internal_missing = (
-        result.isna()
-        & times.notna()
-        & times.between(float(x.min()), float(x.max()))
+        result.isna() & times.notna() & times.between(float(x.min()), float(x.max()))
     )
     for index in patient.index[internal_missing]:
         predicted = estimator(x, y, float(times.loc[index]))
@@ -372,13 +400,18 @@ def dataset_metadata(df):
     }
 
 
-def main():
+def main(merge="soft", occ=1):
 
     print("=" * 60)
     print("INICIANDO PREPARAÇÃO DOS DADOS")
     print("=" * 60)
 
     lr_input_df, mpa_df, tacrolimus_df = read_data()
+
+    lr_input_df, mpa_df, tacrolimus_df = (
+        select_occ5(frame, occ) for frame in (lr_input_df, mpa_df, tacrolimus_df)
+    )
+
     metadata = {
         "versao": 3,
         "gerado_em_utc": datetime.now(timezone.utc).isoformat(),
@@ -411,18 +444,25 @@ def main():
     metadata["exclusao_occ5"] = {
         "momento": "Antes do merge, preenchimento e interpolação",
         "linhas_removidas": {
-            name: len(frame) - len(exclude_occ5(frame))
+            name: len(frame) - len(select_occ5(frame))
             for name, frame in (
-                ("lr_input", lr_input_df), ("mpa", mpa_df),
+                ("lr_input", lr_input_df),
+                ("mpa", mpa_df),
                 ("tacrolimus", tacrolimus_df),
             )
         },
     }
-    merged_df = merge_db(lr_input_df, mpa_df, tacrolimus_df)
+
+    if merge == "soft":
+        merged_df = soft_merge_db(lr_input_df, mpa_df, tacrolimus_df, occ)
+
+    else:
+        merged_df = soft_merge_db(lr_input_df, mpa_df, tacrolimus_df, occ)
 
     metadata["etapas"]["apos_merge"] = dataset_metadata(merged_df)
 
     treated_df = translating_flags(merged_df)
+
     metadata["etapas"]["apos_flags_e_preenchimento"] = dataset_metadata(treated_df)
 
     final_df = ts_interpolation(treated_df)

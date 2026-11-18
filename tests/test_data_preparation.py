@@ -12,16 +12,28 @@ from methods.interpolation import METHODS
 
 class PreparationTest(unittest.TestCase):
     def test_occ5_removed_before_matching_and_interpolation(self):
-        lr = pd.DataFrame({
-            "id": [1, 1, 1], "time": [0., 10., 100.], "occ": [1, 2, 5],
-            "imc": [0]*3, "ar": [0]*3, "nta": [0]*3,
-        })
-        drug = pd.DataFrame({
-            "id": [1, 1, 1], "time": [0., 11., 100.], "occ": [1, 5, 5],
-            "amt": [0]*3, "dv": [2., 999., 999.], "mdv": [0]*3,
-        })
+        lr = pd.DataFrame(
+            {
+                "id": [1, 1, 1],
+                "time": [0.0, 10.0, 100.0],
+                "occ": [1, 2, 5],
+                "imc": [0] * 3,
+                "ar": [0] * 3,
+                "nta": [0] * 3,
+            }
+        )
+        drug = pd.DataFrame(
+            {
+                "id": [1, 1, 1],
+                "time": [0.0, 11.0, 100.0],
+                "occ": [1, 5, 5],
+                "amt": [0] * 3,
+                "dv": [2.0, 999.0, 999.0],
+                "mdv": [0] * 3,
+            }
+        )
         merged = merge_db(lr, drug, drug)
-        self.assertEqual(merged.time.tolist(), [0., 10.])
+        self.assertEqual(merged.time.tolist(), [0.0, 10.0])
         self.assertTrue(np.isnan(merged.dv.iloc[1]))
         prepared = merged.rename(columns={"dv": "dv_tac"})
         for column in ("gf", "lym", "m155", "wgt"):
@@ -61,6 +73,8 @@ class PreparationTest(unittest.TestCase):
         self.assertTrue(result["gf"].isna().all())
 
     def test_string_occ_and_missing_column(self):
-        self.assertEqual(exclude_occ5(pd.DataFrame({"occ": ["1", "5"]})).occ.tolist(), ["1"])
+        self.assertEqual(
+            exclude_occ5(pd.DataFrame({"occ": ["1", "5"]})).occ.tolist(), ["1"]
+        )
         with self.assertRaisesRegex(ValueError, "occ"):
             exclude_occ5(pd.DataFrame({"time": [0]}))

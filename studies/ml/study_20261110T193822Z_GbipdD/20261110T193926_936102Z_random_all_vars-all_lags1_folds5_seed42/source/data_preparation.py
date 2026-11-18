@@ -211,9 +211,11 @@ def _interpolate_patient_series(patient, column, method_name):
     """Interpola lacunas internas e completa bordas pelo valor mais próximo."""
     result = pd.to_numeric(patient[column], errors="coerce").copy()
     times = pd.to_numeric(patient["time"], errors="coerce")
-    observed = pd.DataFrame({"time": times, "value": result}).replace(
-        [np.inf, -np.inf], np.nan
-    ).dropna()
+    observed = (
+        pd.DataFrame({"time": times, "value": result})
+        .replace([np.inf, -np.inf], np.nan)
+        .dropna()
+    )
     if SERIES_VALIDITY_RULES.get(column) == "strictly_positive":
         observed = observed.loc[observed["value"] > 0]
     observed = observed.groupby("time", as_index=False)["value"].mean()
@@ -227,17 +229,13 @@ def _interpolate_patient_series(patient, column, method_name):
     result.loc[valid_missing & times.le(float(x.min()))] = y[0]
     result.loc[valid_missing & times.ge(float(x.max()))] = y[-1]
 
-    minimum_observations = (
-        3 if method_name == "temporal_regression_quadratic" else 2
-    )
+    minimum_observations = 3 if method_name == "temporal_regression_quadratic" else 2
     if len(observed) < minimum_observations:
         return result
 
     estimator = METHODS[method_name]
     internal_missing = (
-        result.isna()
-        & times.notna()
-        & times.between(float(x.min()), float(x.max()))
+        result.isna() & times.notna() & times.between(float(x.min()), float(x.max()))
     )
     for index in patient.index[internal_missing]:
         predicted = estimator(x, y, float(times.loc[index]))
@@ -413,7 +411,8 @@ def main():
         "linhas_removidas": {
             name: len(frame) - len(exclude_occ5(frame))
             for name, frame in (
-                ("lr_input", lr_input_df), ("mpa", mpa_df),
+                ("lr_input", lr_input_df),
+                ("mpa", mpa_df),
                 ("tacrolimus", tacrolimus_df),
             )
         },

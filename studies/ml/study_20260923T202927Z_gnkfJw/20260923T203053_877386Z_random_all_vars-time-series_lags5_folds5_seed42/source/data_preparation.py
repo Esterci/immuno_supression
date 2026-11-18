@@ -341,7 +341,8 @@ def main():
         "linhas_removidas": {
             name: len(frame) - len(exclude_occ5(frame))
             for name, frame in (
-                ("lr_input", lr_input_df), ("mpa", mpa_df),
+                ("lr_input", lr_input_df),
+                ("mpa", mpa_df),
                 ("tacrolimus", tacrolimus_df),
             )
         },

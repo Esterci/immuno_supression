@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import io
+import inspect
 import json
 import runpy
 from datetime import datetime
@@ -29,6 +30,13 @@ ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
 
 
+def call_merge_db(merge_function, frames: list[pd.DataFrame]) -> pd.DataFrame:
+    """Call current or archived merge_db signatures."""
+    if len(inspect.signature(merge_function).parameters) >= 4:
+        return merge_function(*frames, occ=1)
+    return merge_function(*frames)
+
+
 def load_data(data_dir: Path = DATA_DIR) -> dict[str, pd.DataFrame]:
     """Load original, merged and interpolated datasets used by the viewer."""
     paths = {
@@ -38,15 +46,20 @@ def load_data(data_dir: Path = DATA_DIR) -> dict[str, pd.DataFrame]:
     }
     missing = [str(path) for path in paths.values() if not path.exists()]
     if missing:
-        raise FileNotFoundError(f"Arquivos de dados não encontrados: {', '.join(missing)}")
+        raise FileNotFoundError(
+            f"Arquivos de dados não encontrados: {', '.join(missing)}"
+        )
     data = {name: pd.read_parquet(path) for name, path in paths.items()}
 
     normalized = {
-        name: normalizar_colunas(frame).sort_values(["time", "id"]).reset_index(drop=True)
+        name: normalizar_colunas(frame)
+        .sort_values(["time", "id"])
+        .reset_index(drop=True)
         for name, frame in data.items()
     }
+    merge_inputs = [normalized["mir155"], normalized["mpa"], normalized["tacrolimus"]]
     data["merged"] = translating_flags(
-        merge_db(normalized["mir155"], normalized["mpa"], normalized["tacrolimus"])
+        call_merge_db(merge_db, merge_inputs)
     ).sort_values(["id", "time"])
 
     interpolated_path = data_dir / "full_processed.parquet"
@@ -80,6 +93,12 @@ SERIES = {
     "mpa_dose": "MPA — dose (mg equivalentes)",
     "mir155": "miR-155-5p — expressão relativa",
     "lymphocytes": "Linfócitos (LYM)",
+    "weight": "Peso corporal (kg)",
+    "renal_function": "Função renal — GF (mL/min)",
+    "infection": "Infecção geral (IFC)",
+    "other_infection": "Outras infecções (OIFC)",
+    "cmv_infection": "Citomegalovírus (CMV)",
+    "bkv_infection": "BK vírus (BKV)",
 }
 
 STAGES = {
@@ -87,6 +106,8 @@ STAGES = {
     "merged": "Após o merge",
     "interpolated": "Após a interpolação",
 }
+
+BINARY_SERIES = {"infection", "other_infection", "cmv_infection", "bkv_infection"}
 
 
 def format_study_date(value: str | None) -> str:
@@ -210,10 +231,15 @@ def patient_clinical_summary(patient_id: int) -> html.Div:
         return html.Div(
             [
                 html.Div(label, style={"fontSize": "0.82rem", "color": "#64748b"}),
-                html.Div(value, style={"fontSize": "1.1rem", "fontWeight": 700, "color": color}),
-                html.Div(detail, style={"fontSize": "0.78rem", "color": "#64748b"})
-                if detail
-                else None,
+                html.Div(
+                    value,
+                    style={"fontSize": "1.1rem", "fontWeight": 700, "color": color},
+                ),
+                (
+                    html.Div(detail, style={"fontSize": "0.78rem", "color": "#64748b"})
+                    if detail
+                    else None
+                ),
             ],
             style={
                 "border": "1px solid #e2e8f0",
@@ -227,7 +253,10 @@ def patient_clinical_summary(patient_id: int) -> html.Div:
     cards.append(status_card("Função renal mais recente", renal_value, renal_detail))
     return html.Div(
         [
-            html.H3(f"Situação clínica — paciente {patient_id}", style={"margin": "4px 0 12px"}),
+            html.H3(
+                f"Situação clínica — paciente {patient_id}",
+                style={"margin": "4px 0 12px"},
+            ),
             html.Div(
                 cards,
                 style={
@@ -261,7 +290,7 @@ def load_study_pipeline(study_key: str) -> tuple[pd.DataFrame, pd.DataFrame]:
             for frame in raw_frames
         ]
         merged = namespace["translating_flags"](
-            namespace["merge_db"](*normalized)
+            call_merge_db(namespace["merge_db"], normalized)
         ).sort_values(["id", "time"])
         interpolated = namespace["ts_interpolation"](merged.copy()).sort_values(
             ["id", "time"]
@@ -334,11 +363,32 @@ def original_patient_series(patient_id: int) -> dict[str, pd.DataFrame]:
     mir_observations["VALUE"] = mir_observations["M155"]
 
     lymphocyte_observations = mir.loc[
-        (mir["#ID"] == patient_id)
-        & mir["LYM"].notna()
-        & (mir["LYM"] != 9999)
+        (mir["#ID"] == patient_id) & mir["LYM"].notna() & (mir["LYM"] != 9999)
     ].copy()
     lymphocyte_observations["VALUE"] = lymphocyte_observations["LYM"]
+
+    weight_observations = mir.loc[
+        (mir["#ID"] == patient_id)
+        & mir["WGT"].notna()
+        & (mir["WGT"] != 9999)
+    ].copy()
+    weight_observations["VALUE"] = weight_observations["WGT"]
+
+    renal_observations = mir.loc[
+        (mir["#ID"] == patient_id)
+        & mir["GF"].notna()
+        & (mir["GF"] != 9999)
+    ].copy()
+    renal_observations["VALUE"] = renal_observations["GF"]
+
+    def binary_observations(column: str) -> pd.DataFrame:
+        observations = mir.loc[
+            (mir["#ID"] == patient_id)
+            & mir[column].notna()
+            & (mir[column] != 9999)
+        ].copy()
+        observations["VALUE"] = observations[column]
+        return observations.sort_values("TIME")
 
     return {
         "tac_concentration": tac_observations.sort_values("TIME"),
@@ -347,10 +397,18 @@ def original_patient_series(patient_id: int) -> dict[str, pd.DataFrame]:
         "mpa_dose": mpa_doses.sort_values("TIME"),
         "mir155": mir_observations.sort_values("TIME"),
         "lymphocytes": lymphocyte_observations.sort_values("TIME"),
+        "weight": weight_observations.sort_values("TIME"),
+        "renal_function": renal_observations.sort_values("TIME"),
+        "infection": binary_observations("IFC"),
+        "other_infection": binary_observations("OIFC"),
+        "cmv_infection": binary_observations("CMV"),
+        "bkv_infection": binary_observations("BKV"),
     }
 
 
-def processed_patient_series(frame: pd.DataFrame, patient_id: int) -> dict[str, pd.DataFrame]:
+def processed_patient_series(
+    frame: pd.DataFrame, patient_id: int
+) -> dict[str, pd.DataFrame]:
     """Convert a merged/pipeline frame to the same visual series as the raw data."""
     patient = frame.loc[frame["id"] == patient_id].copy()
 
@@ -358,7 +416,9 @@ def processed_patient_series(frame: pd.DataFrame, patient_id: int) -> dict[str, 
         selected = patient.loc[patient[column].notna(), ["time", column]].copy()
         if positive:
             selected = selected.loc[selected[column] > 0]
-        selected["VALUE"] = np.exp(selected[column]) if exponentiate else selected[column]
+        selected["VALUE"] = (
+            np.exp(selected[column]) if exponentiate else selected[column]
+        )
         return selected.rename(columns={"time": "TIME"})[["TIME", "VALUE"]]
 
     return {
@@ -368,6 +428,12 @@ def processed_patient_series(frame: pd.DataFrame, patient_id: int) -> dict[str, 
         "mpa_dose": make_series("amt_map", positive=True),
         "mir155": make_series("m155", positive=True),
         "lymphocytes": make_series("lym"),
+        "weight": make_series("wgt"),
+        "renal_function": make_series("gf"),
+        "infection": make_series("ifc"),
+        "other_infection": make_series("oifc"),
+        "cmv_infection": make_series("cmv"),
+        "bkv_infection": make_series("bkv"),
     }
 
 
@@ -410,6 +476,12 @@ def original_figure(
         "mpa_dose": "#fb7185",
         "mir155": "#7c3aed",
         "lymphocytes": "#059669",
+        "weight": "#a16207",
+        "renal_function": "#0891b2",
+        "infection": "#be123c",
+        "other_infection": "#c2410c",
+        "cmv_infection": "#9333ea",
+        "bkv_infection": "#4f46e5",
     }
     figure = go.Figure()
     for series_key in selected_series:
@@ -508,6 +580,13 @@ def series_figure(
     figure = style_figure(figure, SERIES[series_key], "Valor")
     maximum_time = max(max(trace.x) for trace in figure.data)
     figure.update_xaxes(range=[0, maximum_time * 1.02 if maximum_time > 0 else 1])
+    if series_key in BINARY_SERIES:
+        figure.update_yaxes(
+            tickmode="array",
+            tickvals=[0, 1],
+            ticktext=["Não", "Sim"],
+            range=[-0.1, 1.1],
+        )
     return figure
 
 
@@ -532,7 +611,9 @@ def series_panel(series_key: str) -> html.Div:
             ),
             dcc.Dropdown(
                 id={"type": "stage-select", "series": series_key},
-                options=[{"label": label, "value": key} for key, label in STAGES.items()],
+                options=[
+                    {"label": label, "value": key} for key, label in STAGES.items()
+                ],
                 value=list(STAGES),
                 multi=True,
                 clearable=True,
@@ -544,6 +625,7 @@ def series_panel(series_key: str) -> html.Div:
         style={**CARD_STYLE, "marginTop": "14px"},
     )
 
+
 app.layout = html.Main(
     [
         html.H1("Séries temporais originais", style={"marginBottom": "4px"}),
@@ -554,7 +636,10 @@ app.layout = html.Main(
         html.Label("Paciente", htmlFor="patient-select", style={"fontWeight": 600}),
         dcc.Dropdown(
             id="patient-select",
-            options=[{"label": f"Paciente {patient_id}", "value": patient_id} for patient_id in PATIENT_IDS],
+            options=[
+                {"label": f"Paciente {patient_id}", "value": patient_id}
+                for patient_id in PATIENT_IDS
+            ],
             value=PATIENT_IDS[0],
             clearable=False,
             searchable=True,
@@ -594,7 +679,9 @@ app.layout = html.Main(
             dcc.Graph(id="original-timeseries-graph"),
             style={**CARD_STYLE, "marginTop": "14px"},
         ),
-        html.Hr(style={"border": 0, "borderTop": "1px solid #cbd5e1", "margin": "42px 0"}),
+        html.Hr(
+            style={"border": 0, "borderTop": "1px solid #cbd5e1", "margin": "42px 0"}
+        ),
         html.H1("Séries temporais processadas", style={"marginBottom": "4px"}),
         html.P(
             "Comparação por variável entre dados originais, após o merge e após a interpolação.",
@@ -699,7 +786,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1", help="Interface do servidor")
     parser.add_argument("--port", default=8050, type=int, help="Porta do servidor")
-    parser.add_argument("--debug", action="store_true", help="Ativa recarga e mensagens de depuração")
+    parser.add_argument(
+        "--debug", action="store_true", help="Ativa recarga e mensagens de depuração"
+    )
     return parser.parse_args()
 
 

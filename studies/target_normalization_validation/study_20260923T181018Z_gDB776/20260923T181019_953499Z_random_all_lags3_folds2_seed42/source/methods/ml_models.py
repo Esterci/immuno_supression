@@ -95,7 +95,9 @@ def model_specs(seed=42, quick=False):
     return specs
 
 
-def make_search(model, params, search, folds, n_iter, seed, n_jobs, normalization="none"):
+def make_search(
+    model, params, search, folds, n_iter, seed, n_jobs, normalization="none"
+):
     if normalization not in ("all", "time-series", "none"):
         raise ValueError("normalization deve ser all, time-series ou none")
     if normalization == "all":
@@ -103,10 +105,12 @@ def make_search(model, params, search, folds, n_iter, seed, n_jobs, normalizatio
             regressor=model,
             transformer=MinMaxScaler(),
         )
-        model = Pipeline([
-            ("scaler", MinMaxScaler().set_output(transform="pandas")),
-            ("model", model),
-        ])
+        model = Pipeline(
+            [
+                ("scaler", MinMaxScaler().set_output(transform="pandas")),
+                ("model", model),
+            ]
+        )
         params = {f"model__regressor__{key}": value for key, value in params.items()}
     common = dict(
         estimator=model,
