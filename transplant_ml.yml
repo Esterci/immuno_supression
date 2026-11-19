@@ -14,7 +14,9 @@ dependencies:
   - matplotlib
   - plotly
   - dash
-  - shap>=0.46
+  - shap
   - joblib
   - jupyter
   - ipykernel
+  - plotly
+  - dash

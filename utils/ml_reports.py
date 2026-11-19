@@ -42,7 +42,9 @@ def prediction_plot(y, prediction, path):
     low, high = min(min(y), min(prediction)), max(max(y), max(prediction))
     axes[0].plot([low, high], [low, high], "--", color="black")
     axes[0].set(
-        xlabel="LYM observado", ylabel="LYM previsto", title="Pacientes de teste"
+        xlabel="LYM observado",
+        ylabel="LYM previsto",
+        title="Medidas previsíveis dos pacientes de teste",
     )
     axes[1].scatter(prediction, np.asarray(y) - prediction, alpha=0.5, s=16)
     axes[1].axhline(0, color="black", linestyle="--")
@@ -157,9 +159,27 @@ def summarize(results, output):
     table.to_csv(output / "results.csv", index=False)
     print("\nResultados no conjunto de teste:")
     print(table.to_string(index=False))
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.bar(table["model"], table["rmse"])
-    ax.set(ylabel="RMSE de teste", title="Comparação dos modelos")
-    fig.tight_layout()
-    fig.savefig(output / "model_comparison.png", dpi=160)
-    plt.close(fig)
+    comparisons = (
+        ("rmse", "RMSE", "%.3f", "RMSE de teste"),
+        ("mae", "MAE", "%.3f", "MAE de teste"),
+        (
+            "mape_percent_nonzero",
+            "MAPE",
+            "%.2f%%",
+            "Erro percentual absoluto médio (MAPE, %)",
+        ),
+    )
+    for metric, label, value_format, y_label in comparisons:
+        comparison = table.dropna(subset=[metric])
+        fig, ax = plt.subplots(figsize=(8, 4.5))
+        bars = ax.bar(comparison["model"], comparison[metric])
+        ax.bar_label(bars, fmt=value_format, padding=3)
+        ax.set(
+            ylabel=y_label,
+            title=f"Comparação dos modelos por {label} — medidas previsíveis",
+        )
+        ax.grid(axis="y", alpha=0.25)
+        fig.tight_layout()
+        filename = "mape" if metric == "mape_percent_nonzero" else metric
+        fig.savefig(output / f"model_comparison_{filename}.png", dpi=160)
+        plt.close(fig)

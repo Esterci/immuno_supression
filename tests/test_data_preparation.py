@@ -3,20 +3,37 @@ import numpy as np
 import pandas as pd
 from data_preparation import (
     INTERPOLATION_METHODS,
-    exclude_occ5,
+    data_cleaning,
     merge_db,
+    select_occ5,
     ts_interpolation,
 )
 from methods.interpolation import METHODS
 
 
 class PreparationTest(unittest.TestCase):
+    def test_cleaning_propagates_cisq_and_removes_patients_without_it(self):
+        frame = pd.DataFrame(
+            {
+                "id": [1, 1, 1, 2, 2],
+                "time": [0, 1, 2, 0, 1],
+                "cisq": [np.nan, 7.0, np.nan, np.nan, np.nan],
+                "measurement": [1.0, 2.0, 3.0, 4.0, 5.0],
+            }
+        )
+
+        result = data_cleaning(frame)
+
+        self.assertEqual(result["id"].unique().tolist(), [1])
+        self.assertEqual(result["cisq"].tolist(), [7.0, 7.0, 7.0])
+        self.assertFalse(result["cisq"].isna().any())
+
     def test_occ5_removed_before_matching_and_interpolation(self):
         lr = pd.DataFrame(
             {
                 "id": [1, 1, 1],
                 "time": [0.0, 10.0, 100.0],
-                "occ": [1, 2, 5],
+                "occ": [1, 1, 5],
                 "imc": [0] * 3,
                 "ar": [0] * 3,
                 "nta": [0] * 3,
@@ -32,7 +49,9 @@ class PreparationTest(unittest.TestCase):
                 "mdv": [0] * 3,
             }
         )
-        merged = merge_db(lr, drug, drug)
+        merged = merge_db(
+            select_occ5(lr), select_occ5(drug), select_occ5(drug), occ=1
+        )
         self.assertEqual(merged.time.tolist(), [0.0, 10.0])
         self.assertTrue(np.isnan(merged.dv.iloc[1]))
         prepared = merged.rename(columns={"dv": "dv_tac"})
@@ -74,7 +93,14 @@ class PreparationTest(unittest.TestCase):
 
     def test_string_occ_and_missing_column(self):
         self.assertEqual(
-            exclude_occ5(pd.DataFrame({"occ": ["1", "5"]})).occ.tolist(), ["1"]
+            select_occ5(pd.DataFrame({"occ": ["1", "5"]})).occ.tolist(), ["1"]
         )
         with self.assertRaisesRegex(ValueError, "occ"):
-            exclude_occ5(pd.DataFrame({"time": [0]}))
+            select_occ5(pd.DataFrame({"time": [0]}))
+
+    def test_multiple_occasions_are_selected(self):
+        frame = pd.DataFrame({"occ": [1, 2, 3, 5], "value": range(4)})
+
+        selected = select_occ5(frame, [1, 3])
+
+        self.assertEqual(selected["occ"].tolist(), [1, 3])

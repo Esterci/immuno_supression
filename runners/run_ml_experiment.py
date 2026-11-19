@@ -12,9 +12,11 @@ import sys
 import time
 import traceback
 import joblib
+import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupKFold, GroupShuffleSplit, ParameterGrid
-from methods.ml_models import prepare_features, model_specs, make_search
+from data_preparation import NON_TEMPORAL_COLUMNS
+from methods.ml_models import model_specs, make_search
 from utils.ml_reports import (
     write_json,
     regression_metrics,
@@ -25,6 +27,112 @@ from utils.ml_reports import (
 from utils.analyze_patient_timeseries import analyze as analyze_patient_timeseries
 
 BASE = Path(__file__).resolve().parents[1]
+
+
+def prepare_measurement_features(data, target="lym", var_mode="all"):
+    """Formata uma linha por medida do alvo usando apenas o histórico disponível."""
+    if var_mode not in {"all", "time-series"}:
+        raise ValueError("var_mode deve ser all ou time-series")
+    required = {"id", "time", target}
+    if missing := sorted(required - set(data.columns)):
+        raise ValueError(f"Colunas ausentes: {missing}")
+    if data[["id", "time"]].isna().any().any():
+        raise ValueError("id e time não podem conter valores ausentes")
+
+    data = data.sort_values(["id", "time"], kind="stable").copy()
+    available_static_columns = [
+        column
+        for column in NON_TEMPORAL_COLUMNS
+        if column in data.columns and column not in {"id", "time", target}
+    ]
+    static_columns = available_static_columns if var_mode == "all" else []
+    temporal_columns = [
+        column
+        for column in data.columns
+        if column not in {*available_static_columns, "id", "time", target}
+    ]
+
+    target_rows = data[target].notna()
+    supervised = data.loc[target_rows]
+    if supervised.empty:
+        raise ValueError(f"Nenhuma medida observada de {target}")
+
+    # ID identifica os grupos, mas não é oferecido ao modelo. O tempo é feature.
+    X = supervised[["time", *static_columns]].copy()
+    y = pd.to_numeric(supervised[target], errors="coerce").copy()
+    rows = supervised[["id", "time"]].copy()
+    generated_columns = []
+
+    for predictor in temporal_columns:
+        observed = data.loc[
+            data[predictor].notna(), ["id", "time", predictor]
+        ].copy()
+        observed[predictor] = pd.to_numeric(observed[predictor], errors="coerce")
+        observed = observed.dropna(subset=[predictor])
+        histories = {
+            patient_id: history.sort_values("time", kind="stable")
+            for patient_id, history in observed.groupby("id", sort=False)
+        }
+
+        initial = pd.Series(np.nan, index=supervised.index, dtype=float)
+        delta_time = pd.Series(np.nan, index=supervised.index, dtype=float)
+        value = pd.Series(np.nan, index=supervised.index, dtype=float)
+        tendency = pd.Series(np.nan, index=supervised.index, dtype=float)
+
+        for index, measurement in supervised[["id", "time"]].iterrows():
+            history = histories.get(measurement["id"])
+            if history is None:
+                continue
+            # Somente medidas estritamente anteriores ao alvo são elegíveis.
+            eligible = history.loc[history["time"] < measurement["time"]]
+            if eligible.empty:
+                continue
+
+            initial.loc[index] = eligible.iloc[0][predictor]
+            if len(eligible) < 2:
+                continue
+
+            previous = eligible.iloc[-1]
+            penultimate = eligible.iloc[-2]
+            delta_time.loc[index] = measurement["time"] - previous["time"]
+            value.loc[index] = previous[predictor]
+            elapsed = previous["time"] - penultimate["time"]
+            tendency.loc[index] = (
+                (previous[predictor] - penultimate[predictor]) / elapsed
+                if elapsed != 0
+                else 0.0
+            )
+
+        predictor_features = [
+            f"initial_{predictor}",
+            f"d_time_{predictor}",
+            f"val_{predictor}",
+            f"tend_{predictor}",
+        ]
+        X[predictor_features] = pd.concat(
+            [initial, delta_time, value, tendency], axis=1
+        ).to_numpy()
+        generated_columns.extend(predictor_features)
+
+    if not np.isfinite(y).all():
+        raise ValueError(f"O alvo {target} contém valores não numéricos ou infinitos")
+    X = X.replace([np.inf, -np.inf], np.nan)
+    predictable = X[generated_columns].notna().all(axis=1)
+    X, y, rows = X.loc[predictable], y.loc[predictable], rows.loc[predictable]
+    if X.empty:
+        raise ValueError(
+            "Nenhuma medida de LYM possui histórico temporal completo para previsão"
+        )
+    if X.isna().any().any():
+        missing = X.columns[X.isna().any()].tolist()
+        raise ValueError(
+            "Features não temporais contêm valores ausentes: " f"{missing}"
+        )
+    return (
+        X.reset_index(drop=True),
+        y.reset_index(drop=True),
+        rows.reset_index(drop=True),
+    )
 
 
 class Tee:
@@ -49,26 +157,25 @@ def parse_args(argv=None):
         type=Path,
         default=None,
         help=(
-            "Parquet de entrada. Por padrão usa full_processed no modo time-series "
-            "e clean_processed no modo all."
+            "Parquet de entrada. Por padrão usa clean_processed.parquet."
         ),
     )
     parser.add_argument("--output-dir", type=Path, default=BASE / "studies/ml")
     parser.add_argument("--search", choices=["grid", "random"], default="random")
-    parser.add_argument("--lags", type=int, default=3)
     parser.add_argument("--folds", type=int, default=5)
     parser.add_argument("--n-iter", type=int, default=30)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--n-jobs", type=int, default=-1)
     parser.add_argument("--test-size", type=float, default=0.2)
-    parser.add_argument(
-        "--normalization", choices=["all", "time-series", "none"], default="all"
-    )
+    parser.add_argument("--normalization", choices=["all"], default="all")
     parser.add_argument(
         "--var-mode",
         choices=["all", "time-series"],
         default="all",
-        help="all inclui variáveis clínicas e histórico; time-series usa tempo atual e histórico das séries e de LYM",
+        help=(
+            "all inclui variáveis não temporais; time-series usa somente time e "
+            "atributos derivados das séries temporais"
+        ),
     )
     parser.add_argument(
         "--models", nargs="+", choices=list(model_specs()), default=list(model_specs())
@@ -83,13 +190,12 @@ def parse_args(argv=None):
     )
     args = parser.parse_args(argv)
     if (
-        args.lags < 0
-        or args.folds < 2
+        args.folds < 2
         or args.n_iter < 1
         or args.n_jobs == 0
         or args.seed < 0
     ):
-        parser.error("Exige lags >= 0, folds >= 2, n-iter >= 1, n-jobs != 0, seed >= 0")
+        parser.error("Exige folds >= 2, n-iter >= 1, n-jobs != 0, seed >= 0")
     if (
         not 0 < args.test_size < 1
         or min(args.shap_samples, args.shap_background, args.shap_permutations) < 1
@@ -110,8 +216,8 @@ def execute(args, output, metadata):
     import shap  # Falha antes de treinar se a dependência estiver ausente.
 
     data = pd.read_parquet(args.data)
-    X, y, rows = prepare_features(
-        data, args.lags, args.normalization, var_mode=args.var_mode
+    X, y, rows = prepare_measurement_features(
+        data, target="lym", var_mode=args.var_mode
     )
     train, test = next(
         GroupShuffleSplit(
@@ -123,7 +229,7 @@ def execute(args, output, metadata):
     groups = rows.iloc[train]["id"]
     if groups.nunique() < args.folds:
         raise ValueError(
-            f"Folds={args.folds}, mas só há {groups.nunique()} pacientes de treino após lags/teste"
+            f"Folds={args.folds}, mas só há {groups.nunique()} pacientes de treino após formatação/teste"
         )
     splits = rows.copy()
     splits["split"] = "test"
@@ -134,43 +240,50 @@ def execute(args, output, metadata):
     ):
         splits.loc[X_train.iloc[validation].index, "validation_fold"] = fold
     splits.to_csv(output / "splits.csv", index_label="row")
-    data.describe().to_csv(output / "input_summary.csv")
+    test_patient_ids = rows.iloc[test]["id"].unique()
+    test_target_series = data.loc[
+        data["id"].isin(test_patient_ids) & data["lym"].notna(),
+        ["id", "time", "lym"],
+    ].sort_values(["id", "time"], kind="stable")
+    test_target_series.to_csv(output / "test_target_series.csv", index=False)
+    pd.concat([X, y.rename("lym")], axis=1).describe().to_csv(
+        output / "input_summary.csv"
+    )
     metadata.update(
         input_sha256=hashlib.sha256(args.data.read_bytes()).hexdigest(),
         rows_before=len(data),
-        rows_after_lags=len(X),
+        target_measurements_before_formatting=int(data["lym"].notna().sum()),
+        rows_after_formatting=len(X),
+        target_measurements_removed_without_history=int(
+            data["lym"].notna().sum() - len(X)
+        ),
         patients_before=int(data.id.nunique()),
         missing_before=int(data.isna().sum().sum()),
         missing_features=int(X.isna().sum().sum()),
-        patients_after_lags=int(rows.id.nunique()),
+        patients_after_formatting=int(rows.id.nunique()),
         train_rows=len(train),
         test_rows=len(test),
         train_patients=int(groups.nunique()),
         test_patients=int(rows.iloc[test].id.nunique()),
         features=X.columns.tolist(),
         target="lym",
-        variable_mode={
-            "mode": args.var_mode,
-            "description": {
-                "all": "Variáveis disponíveis, exceto id, o alvo LYM e as quatro séries farmacológicas correntes; inclui tempo e histórico de LYM.",
-                "time-series": "Tempo atual e colunas t0..tN de time, lym, amt_tac, dv_tac, amt_map e dv_map.",
-            }[args.var_mode],
+        feature_format={
+            "mode": "measurement_history",
+            "variable_mode": args.var_mode,
+            "description": "Uma linha por medida de LYM; estáticas e tempo atual, mais valor inicial, último valor, tempo desde o último valor e tendência das séries temporais.",
             "feature_count": len(X.columns),
+            "target_excluded_from_history": True,
         },
         protocol="GroupShuffleSplit para teste; GroupKFold apenas no treino; refit no treino completo",
         normalization={
-            "mode": args.normalization,
-            "description": {
-                "all": "MinMax em todos os atributos, lags e no alvo LYM, ajustado apenas no treino de cada fold; os scalers finais são ajustados no treino completo e salvos no Pipeline.",
-                "time-series": "MinMax das quatro séries farmacológicas por paciente, usando sua série completa; tempo e histórico LYM escalados somente no treino de cada fold.",
-                "none": "MinMax somente no tempo e histórico de LYM, ajustado no treino de cada fold.",
-            }[args.normalization],
-            "target_scaled": args.normalization == "all",
-            "predictions_inverse_transformed": args.normalization == "all",
+            "mode": "all",
+            "description": "MinMax em todos os atributos e no alvo LYM. Os transformadores são ajustados somente no treino de cada fold.",
+            "target_scaled": True,
+            "predictions_inverse_transformed": True,
             "identifiers_scaled": False,
-            "time_and_lym_history": "MinMax por atributo, ajustado somente no treino de cada fold em todos os modos; metadados time e alvo preservados na escala original.",
+            "metadata": "ID e tempo usados nos relatórios permanecem na escala original.",
         },
-        preprocessing_note="t0 é o primeiro valor; as quatro séries correntes são excluídas; t0 só entra em observações posteriores à inicial. A preparação anterior pode usar dados futuros via interpolação/preenchimento. Estudo retrospectivo.",
+        preprocessing_note="Atributos históricos usam somente observações no mesmo paciente com time < ao time do alvo. Medidas de LYM com qualquer feature temporal ausente são excluídas. ID é usado apenas para agrupamento. Todas as features restantes são normalizadas somente com dados de treino em cada fold.",
         search_scoring="r2",
         metrics_weighting="Por observação, não por paciente",
         models={},
@@ -259,7 +372,7 @@ def main(argv=None):
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%fZ")
     output = (
         args.output_dir.resolve()
-        / f"{stamp}_{args.merge}_{args.occ}_{args.search}_{args.normalization}_vars-{args.var_mode}_lags{args.lags}_folds{args.folds}_seed{args.seed}"
+        / f"{stamp}_{args.search}_{args.normalization}_vars-{args.var_mode}_measurement-history_folds{args.folds}_seed{args.seed}"
     )
     output.mkdir(parents=True, exist_ok=False)
     metadata = {

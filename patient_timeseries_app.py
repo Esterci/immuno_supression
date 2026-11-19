@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from dash import MATCH, Dash, Input, Output, State, dcc, html
+from dash import Dash, Input, Output, dcc, html
 
 from data_preparation import merge_db, normalizar_colunas, translating_flags
 
@@ -80,10 +80,13 @@ PATIENT_IDS = sorted(
     }
 )
 
-STUDY_SOURCES = {
-    str(path.parent.parent.relative_to(ROOT)): path
-    for path in sorted((ROOT / "studies").glob("**/source/data_preparation.py"))
+EXPERIMENTS = {
+    str(path.parent.relative_to(ROOT)): path.parent
+    for path in sorted((ROOT / "studies" / "ml").glob("**/metadata.json"))
+    if (path.parent / "test_target_series.csv").exists()
+    and any(path.parent.glob("*/predictions.csv"))
 }
+DEFAULT_EXPERIMENT = next(reversed(EXPERIMENTS), None)
 
 
 SERIES = {
@@ -127,20 +130,11 @@ def format_study_date(value: str | None) -> str:
         return value
 
 
-def study_description(study_key: str):
-    """Create a short, human-readable description from a study metadata file."""
-    if study_key == "current":
-        metadata_path = DATA_DIR / "data_preparation_metadata.json"
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-        return [
-            html.Strong("Pipeline atual. "),
-            html.Span(
-                f"Dados gerados em {format_study_date(metadata.get('gerado_em_utc'))}. "
-                "Não é uma execução de ML, portanto número de lags e folds não se aplicam."
-            ),
-        ]
-
-    metadata_path = ROOT / study_key / "metadata.json"
+def study_description(study_key: str | None):
+    """Create a short description of a selected ML experiment."""
+    if not study_key or study_key not in EXPERIMENTS:
+        return "Nenhum experimento de ML compatível foi encontrado."
+    metadata_path = EXPERIMENTS[study_key] / "metadata.json"
     if not metadata_path.exists():
         return "Metadados não disponíveis para este estudo."
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -148,26 +142,14 @@ def study_description(study_key: str):
     started = format_study_date(metadata.get("started_at_utc"))
     details = [f"Data: {started}"]
 
-    if config:
-        details.extend(
-            [
-                f"lags: {config.get('lags', 'não informado')}",
-                f"folds: {config.get('folds', 'não informado')}",
-                f"busca: {config.get('search', 'não informada')}",
-                f"normalização: {config.get('normalization', 'não informada')}",
-                f"modo de variáveis: {config.get('var_mode', 'não informado')}",
-            ]
-        )
-    else:
-        protocol = metadata.get("protocol") or {}
-        details.extend(
-            [
-                "tipo: estudo de interpolação",
-                f"observações mínimas: {protocol.get('min_observations', 'não informado')}",
-                f"séries avaliadas: {len(metadata.get('series') or [])}",
-                "lags: não se aplica",
-            ]
-        )
+    details.extend(
+        [
+            f"folds: {config.get('folds', 'não informado')}",
+            f"busca: {config.get('search', 'não informada')}",
+            f"normalização: {config.get('normalization', 'não informada')}",
+            "modelos: " + ", ".join(metadata.get("models") or ["não informados"]),
+        ]
+    )
     return [
         html.Strong(f"{Path(study_key).name}. "),
         html.Span("; ".join(details) + "."),
@@ -511,6 +493,85 @@ def original_figure(
     return figure
 
 
+def experiment_lym_figure(
+    patient_id: int, experiment_key: str | None, plot_type: str
+) -> go.Figure:
+    """Plot the complete original LYM series with experiment predictions."""
+    if not experiment_key or experiment_key not in EXPERIMENTS:
+        return empty_figure(
+            "LYM original e previsto", "Selecione um experimento compatível"
+        )
+
+    original = original_patient_series(patient_id)["lymphocytes"]
+    figure = go.Figure()
+    if not original.empty:
+        figure.add_trace(
+            go.Scatter(
+                x=original["TIME"],
+                y=original["VALUE"],
+                mode="markers" if plot_type == "scatter" else "lines+markers",
+                name="LYM original",
+                marker={"size": 9, "color": "#2563eb"},
+                line={"color": "#2563eb", "width": 2},
+                hovertemplate=(
+                    "LYM original<br>Tempo: %{x:.2f} h"
+                    "<br>Valor: %{y:.4g}<extra></extra>"
+                ),
+            )
+        )
+
+    experiment = EXPERIMENTS[experiment_key]
+    metadata = json.loads(
+        (experiment / "metadata.json").read_text(encoding="utf-8")
+    )
+    colors = ["#dc2626", "#059669", "#7c3aed", "#d97706"]
+    prediction_count = 0
+    for color, model in zip(colors, metadata.get("models") or []):
+        prediction_path = experiment / model / "predictions.csv"
+        if not prediction_path.exists():
+            continue
+        predictions = pd.read_csv(prediction_path)
+        patient = predictions.loc[predictions["id"] == patient_id].sort_values("time")
+        if patient.empty:
+            continue
+        prediction_count += len(patient)
+        figure.add_trace(
+            go.Scatter(
+                x=patient["time"],
+                y=patient["predicted"],
+                mode="markers" if plot_type == "scatter" else "lines+markers",
+                name=f"LYM previsto — {model.replace('_', ' ').title()}",
+                marker={"size": 10, "symbol": "diamond", "color": color},
+                line={"color": color, "width": 2, "dash": "dash"},
+                hovertemplate=(
+                    f"{model.replace('_', ' ').title()}"
+                    "<br>Tempo: %{x:.2f} h"
+                    "<br>LYM previsto: %{y:.4g}<extra></extra>"
+                ),
+            )
+        )
+
+    if not figure.data:
+        return empty_figure("LYM original e previsto")
+    if prediction_count == 0:
+        figure.add_annotation(
+            text="Este paciente não pertence ao conjunto de teste do experimento",
+            x=0.5,
+            y=0.95,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            bgcolor="rgba(255,255,255,0.85)",
+        )
+    figure = style_figure(
+        figure,
+        f"LYM original e previsto — paciente {patient_id}",
+        "LYM",
+    )
+    figure.update_layout(legend_title_text="Série")
+    return figure
+
+
 def series_figure(
     patient_id: int,
     series_key: str,
@@ -682,34 +743,28 @@ app.layout = html.Main(
         html.Hr(
             style={"border": 0, "borderTop": "1px solid #cbd5e1", "margin": "42px 0"}
         ),
-        html.H1("Séries temporais processadas", style={"marginBottom": "4px"}),
+        html.H1("Previsões de LYM", style={"marginBottom": "4px"}),
         html.P(
-            "Comparação por variável entre dados originais, após o merge e após a interpolação.",
+            "Série original completa de LYM com as previsões do experimento selecionado.",
             style={"color": "#475569", "marginTop": 0},
         ),
-        html.P(
-            "Marcadores em forma de estrela destacam pontos acrescentados em relação "
-            "à etapa anterior.",
-            style={"color": "#475569", "marginTop": "-6px"},
+        html.Label(
+            "Experimento", htmlFor="study-select", style={"fontWeight": 600}
         ),
-        html.Label("Estudo", htmlFor="study-select", style={"fontWeight": 600}),
         dcc.Dropdown(
             id="study-select",
             options=[
-                {"label": "Pipeline atual", "value": "current"},
-                *[
-                    {"label": study_key, "value": study_key}
-                    for study_key in STUDY_SOURCES
-                ],
+                {"label": experiment_key, "value": experiment_key}
+                for experiment_key in EXPERIMENTS
             ],
-            value="current",
+            value=DEFAULT_EXPERIMENT,
             clearable=False,
             searchable=True,
             style={"marginTop": "6px"},
         ),
         html.Div(
             id="study-description",
-            children=study_description("current"),
+            children=study_description(DEFAULT_EXPERIMENT),
             style={
                 **CARD_STYLE,
                 "marginTop": "12px",
@@ -717,13 +772,10 @@ app.layout = html.Main(
                 "color": "#334155",
             },
         ),
-        html.P(
-            "Os estudos históricos são reconstruídos com o código arquivado de cada "
-            "execução e as bases originais atuais; os Parquets processados históricos "
-            "não foram armazenados.",
-            style={"color": "#64748b", "fontSize": "0.9rem"},
+        html.Div(
+            dcc.Graph(id="experiment-lym-graph"),
+            style={**CARD_STYLE, "marginTop": "14px"},
         ),
-        html.Div([series_panel(series_key) for series_key in SERIES]),
     ],
     style={
         "fontFamily": "system-ui, -apple-system, sans-serif",
@@ -754,27 +806,15 @@ def update_study_description(study_key: str):
 
 
 @app.callback(
-    Output({"type": "series-graph", "series": MATCH}, "figure"),
+    Output("experiment-lym-graph", "figure"),
     Input("patient-select", "value"),
-    Input({"type": "stage-select", "series": MATCH}, "value"),
-    Input("plot-type", "value"),
     Input("study-select", "value"),
-    State({"type": "stage-select", "series": MATCH}, "id"),
+    Input("plot-type", "value"),
 )
-def update_series_graph(
-    patient_id: int,
-    selected_stages: list[str] | None,
-    plot_type: str,
-    study_key: str,
-    component_id: dict[str, str],
+def update_experiment_lym_graph(
+    patient_id: int, experiment_key: str | None, plot_type: str
 ):
-    return series_figure(
-        int(patient_id),
-        component_id["series"],
-        selected_stages,
-        plot_type,
-        study_key,
-    )
+    return experiment_lym_figure(int(patient_id), experiment_key, plot_type)
 
 
 @app.callback(Output("patient-summary", "children"), Input("patient-select", "value"))

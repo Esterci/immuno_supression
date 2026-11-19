@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Uma pasta por combinação de busca, lags, folds e seed.
+# Uma pasta por combinação de busca, folds e seed.
 set -euo pipefail
 script_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 cd "${script_directory}/.."
@@ -22,26 +22,22 @@ study_stamp=$(date -u +%Y%m%dT%H%M%SZ)
 mkdir -p "$output_root"
 study_dir=$(mktemp -d "${output_root}/study_${study_stamp}_XXXXXX")
 if [[ ${PREPARE_DATA:-1} == 1 ]]; then
-    "$python_bin" -u data_preparation.py 2>&1 | tee "$study_dir/data_preparation.log"
+    read -r -a occasions <<< "${OCC:-1}"
+    "$python_bin" -u data_preparation.py --occ "${occasions[@]}" \
+        2>&1 | tee "$study_dir/data_preparation.log"
 fi
-read -r -a merge <<< "${SEEDS:-soft}"
-read -r -a occ <<< "${OCC:-1}"
 read -r -a searches <<< "${SEARCHES:-random}"
-read -r -a lags <<< "${LAGS:-3}"
 read -r -a folds <<< "${FOLDS:-5}"
 read -r -a seeds <<< "${SEEDS:-42}"
 for search in "${searches[@]}"; do
-    for lag in "${lags[@]}"; do
-        for fold in "${folds[@]}"; do
-            for seed in "${seeds[@]}"; do
-                "$python_bin" -u -m runners.run_ml_experiment \
-                    --merge "$merge" --lags "$occ" \
-                    --search "$search" --lags "$lag" \
-                    --folds "$fold" --seed "$seed" \
-                    --var-mode "$var_mode" \
-                    --n-iter "${N_ITER:-30}" --n-jobs "${N_JOBS:--1}" \
-                    --output-dir "$study_dir" "$@"
-            done
+    for fold in "${folds[@]}"; do
+        for seed in "${seeds[@]}"; do
+            "$python_bin" -u -m runners.run_ml_experiment \
+                --search "$search" --folds "$fold" --seed "$seed" \
+                --normalization all \
+                --var-mode "$var_mode" \
+                --n-iter "${N_ITER:-30}" --n-jobs "${N_JOBS:--1}" \
+                --output-dir "$study_dir" "$@"
         done
     done
 done

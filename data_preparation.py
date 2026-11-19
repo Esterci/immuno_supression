@@ -40,10 +40,27 @@ NON_TEMPORAL_COLUMNS = [
 ]
 
 
+def propagate_non_temporal_columns(df):
+    """Propaga variáveis não temporais para todos os registros do paciente."""
+    df = df.copy()
+    columns = [column for column in NON_TEMPORAL_COLUMNS if column in df.columns]
+    if columns:
+        df[columns] = df.groupby("id", dropna=False)[columns].transform(
+            lambda series: series.ffill().bfill()
+        )
+    return df
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--merge", type=str, default="hard")
-    parser.add_argument("--occ", type=int, default=1)
+    parser.add_argument(
+        "--occ",
+        type=int,
+        nargs="+",
+        default=[1],
+        help="Uma ou mais ocasiões mantidas antes do merge (padrão: 1)",
+    )
 
     args = parser.parse_args(argv)
 
@@ -123,11 +140,15 @@ def read_data():
 # ---------------------------------------------------------
 
 
-def select_occ5(data, occ=1):
-    """Exclui a ocasião 5 antes de qualquer merge, preenchimento ou interpolação."""
+def select_occ5(data, occ=(1,)):
+    """Mantém as ocasiões selecionadas antes do merge e demais tratamentos."""
     if "occ" not in data.columns:
-        raise ValueError("Coluna occ obrigatória para excluir OCC = 5")
-    return data.loc[pd.to_numeric(data["occ"], errors="raise") == occ].copy()
+        raise ValueError("Coluna occ obrigatória para selecionar ocasiões")
+    occasions = [occ] if np.isscalar(occ) else list(occ)
+    if not occasions:
+        raise ValueError("Informe ao menos uma ocasião")
+    numeric_occ = pd.to_numeric(data["occ"], errors="raise")
+    return data.loc[numeric_occ.isin(occasions)].copy()
 
 
 def soft_merge_db(lr_input_df, mpa_df, tacrolimus_df, occ):
@@ -237,14 +258,7 @@ def translating_flags(merged_df):
 
     print("  Propagando dados não temporais dentro de cada paciente...")
 
-    colunas_presentes = [
-        coluna for coluna in NON_TEMPORAL_COLUMNS if coluna in merged_df.columns
-    ]
-    merged_df[colunas_presentes] = merged_df.groupby("id")[
-        colunas_presentes
-    ].transform(
-        lambda serie: serie.ffill().bfill()
-    )
+    merged_df = propagate_non_temporal_columns(merged_df)
 
     print("  Tratamento das flags concluído.")
 
@@ -370,6 +384,17 @@ def data_cleaning(final_df):
 
     print("\n[4/5] Criando base limpa...")
 
+    missing_columns = sorted({"id", "cisq"} - set(final_df.columns))
+    if missing_columns:
+        raise ValueError(
+            "Colunas obrigatórias ausentes na limpeza: "
+            f"{missing_columns}"
+        )
+
+    # A limpeza também garante a propagação. Isso evita NaNs parciais caso esta
+    # função seja chamada com dados que não passaram por translating_flags().
+    final_df = propagate_non_temporal_columns(final_df)
+
     colunas_medidas = [
         coluna for coluna in final_df.columns if coluna not in {"id", "time"}
     ]
@@ -439,8 +464,13 @@ def main(argv=None):
 
     lr_input_df, mpa_df, tacrolimus_df = read_data()
 
+    raw_frames = (lr_input_df, mpa_df, tacrolimus_df)
+    removed_by_source = {
+        name: len(frame) - len(select_occ5(frame, args.occ))
+        for name, frame in zip(("lr_input", "mpa", "tacrolimus"), raw_frames)
+    }
     lr_input_df, mpa_df, tacrolimus_df = (
-        select_occ5(frame, args.occ) for frame in (lr_input_df, mpa_df, tacrolimus_df)
+        select_occ5(frame, args.occ) for frame in raw_frames
     )
 
     metadata = {
@@ -472,16 +502,10 @@ def main(argv=None):
         },
     }
 
-    metadata["exclusao_occ5"] = {
+    metadata["selecao_occ"] = {
         "momento": "Antes do merge, preenchimento e interpolação",
-        "linhas_removidas": {
-            name: len(frame) - len(select_occ5(frame))
-            for name, frame in (
-                ("lr_input", lr_input_df),
-                ("mpa", mpa_df),
-                ("tacrolimus", tacrolimus_df),
-            )
-        },
+        "ocasioes_mantidas": args.occ,
+        "linhas_removidas": removed_by_source,
     }
 
     if args.merge == "soft":

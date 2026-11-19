@@ -6,19 +6,85 @@ import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.base import clone
 from methods.ml_models import prepare_features, model_specs, make_search
-from runners.run_ml_experiment import parse_args
+from runners.run_ml_experiment import parse_args, prepare_measurement_features
 from utils.ml_reports import regression_metrics
 
 
 class MLMethodsTest(unittest.TestCase):
-    def test_default_dataset_depends_on_variable_mode(self):
+    def test_default_dataset_is_clean_processed(self):
+        default = parse_args([])
         temporal = parse_args(["--var-mode", "time-series"])
-        clinical = parse_args(["--var-mode", "all"])
-        custom = parse_args(["--var-mode", "time-series", "--data", "custom.parquet"])
+        custom = parse_args(["--data", "custom.parquet"])
 
+        self.assertEqual(default.data.name, "clean_processed.parquet")
         self.assertEqual(temporal.data.name, "full_processed.parquet")
-        self.assertEqual(clinical.data.name, "clean_processed.parquet")
         self.assertEqual(custom.data, Path("custom.parquet"))
+        self.assertEqual(default.models, list(model_specs()))
+
+    def test_measurement_time_series_mode_excludes_non_temporal_variables(self):
+        raw = self.data()
+        raw["cisq"] = np.nan
+
+        X, y, rows = prepare_measurement_features(raw, var_mode="time-series")
+
+        self.assertNotIn("age", X.columns)
+        self.assertNotIn("cisq", X.columns)
+        self.assertIn("time", X.columns)
+        self.assertEqual(rows["id"].nunique(), raw["id"].nunique())
+        self.assertFalse(X.isna().any().any())
+        self.assertEqual(len(X), len(y))
+
+    def test_measurement_format_uses_history_without_target_leakage(self):
+        raw = self.data().sort_values(["id", "time"])
+        X, y, rows = prepare_measurement_features(raw)
+
+        self.assertEqual(len(X), 3 * raw["id"].nunique())
+        self.assertIn("time", X.columns)
+        self.assertIn("age", X.columns)
+        self.assertIn("initial_dv_tac", X.columns)
+        self.assertIn("val_dv_tac", X.columns)
+        self.assertIn("d_time_dv_tac", X.columns)
+        self.assertIn("tend_dv_tac", X.columns)
+        self.assertFalse(any("lym" in column for column in X.columns))
+        self.assertNotIn("id", X.columns)
+        predictable = raw["time"] >= 2
+        pd.testing.assert_series_equal(
+            y, raw.loc[predictable, "lym"].reset_index(drop=True), check_names=True
+        )
+        pd.testing.assert_frame_equal(
+            rows,
+            raw.loc[predictable, ["id", "time"]].reset_index(drop=True),
+        )
+
+        patient = rows.id == 0
+        np.testing.assert_array_equal(X.loc[patient, "initial_dv_tac"], 0)
+        np.testing.assert_array_equal(
+            X.loc[patient, "val_dv_tac"], [1, 2, 3]
+        )
+        np.testing.assert_array_equal(rows.loc[patient, "time"], [2, 3, 4])
+        self.assertFalse(X.isna().any().any())
+
+    def test_all_pipeline_normalizes_measurement_features(self):
+        X, y, rows = prepare_measurement_features(self.data())
+        train = rows.id < 6
+        model, params = model_specs(quick=True)["random_forest"]
+        search = make_search(model, params, "grid", 2, 1, 42, 1, "all")
+        search.fit(X[train], y[train], groups=rows.loc[train, "id"])
+
+        transformed = search.best_estimator_[:-1].transform(X[train])
+        self.assertFalse(transformed.isna().any().any())
+        self.assertTrue((transformed.min() >= 0).all())
+        self.assertTrue((transformed.max() <= 1).all())
+
+    def test_patients_with_only_one_predictable_measurement_are_kept(self):
+        raw = self.data()
+        raw = raw.loc[~((raw["id"] == 0) & (raw["time"] > 2))]
+
+        X, _, rows = prepare_measurement_features(raw)
+
+        self.assertIn(0, rows["id"].unique())
+        self.assertEqual((rows["id"] == 0).sum(), 1)
+        self.assertEqual(len(X), 1 + 3 * 7)
 
     def test_normalization_modes_preserve_metadata_and_target(self):
         raw = self.data()
