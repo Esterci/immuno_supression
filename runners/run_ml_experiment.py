@@ -259,7 +259,7 @@ def main(argv=None):
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%fZ")
     output = (
         args.output_dir.resolve()
-        / f"{stamp}_{args.search}_{args.normalization}_vars-{args.var_mode}_lags{args.lags}_folds{args.folds}_seed{args.seed}"
+        / f"{stamp}_{args.merge}_{args.occ}_{args.search}_{args.normalization}_vars-{args.var_mode}_lags{args.lags}_folds{args.folds}_seed{args.seed}"
     )
     output.mkdir(parents=True, exist_ok=False)
     metadata = {
@@ -306,7 +306,9 @@ def main(argv=None):
             source.read_bytes()
         ).hexdigest()
     write_json(output / "metadata.json", metadata)
+
     start = time.perf_counter()
+
     with (output / "run.log").open("w", encoding="utf-8") as log:
         with redirect_stdout(Tee(sys.stdout, log)), redirect_stderr(
             Tee(sys.stderr, log)

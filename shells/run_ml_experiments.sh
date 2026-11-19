@@ -24,6 +24,8 @@ study_dir=$(mktemp -d "${output_root}/study_${study_stamp}_XXXXXX")
 if [[ ${PREPARE_DATA:-1} == 1 ]]; then
     "$python_bin" -u data_preparation.py 2>&1 | tee "$study_dir/data_preparation.log"
 fi
+read -r -a merge <<< "${SEEDS:-soft}"
+read -r -a occ <<< "${OCC:-1}"
 read -r -a searches <<< "${SEARCHES:-random}"
 read -r -a lags <<< "${LAGS:-3}"
 read -r -a folds <<< "${FOLDS:-5}"
@@ -33,7 +35,9 @@ for search in "${searches[@]}"; do
         for fold in "${folds[@]}"; do
             for seed in "${seeds[@]}"; do
                 "$python_bin" -u -m runners.run_ml_experiment \
-                    --search "$search" --lags "$lag" --folds "$fold" --seed "$seed" \
+                    --merge "$merge" --lags "$occ" \
+                    --search "$search" --lags "$lag" \
+                    --folds "$fold" --seed "$seed" \
                     --var-mode "$var_mode" \
                     --n-iter "${N_ITER:-30}" --n-jobs "${N_JOBS:--1}" \
                     --output-dir "$study_dir" "$@"
