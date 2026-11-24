@@ -24,6 +24,7 @@ study_dir=$(mktemp -d "${output_root}/study_${study_stamp}_XXXXXX")
 if [[ ${PREPARE_DATA:-1} == 1 ]]; then
     read -r -a occasions <<< "${OCC:-1}"
     "$python_bin" -u data_preparation.py --occ "${occasions[@]}" \
+        --var-mode "$var_mode" \
         2>&1 | tee "$study_dir/data_preparation.log"
 fi
 read -r -a searches <<< "${SEARCHES:-random}"

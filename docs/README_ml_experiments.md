@@ -29,7 +29,9 @@ devolvidas à escala original. Métricas e plots incluem somente medidas previs�
 O modo padrão `VARMODE=all` inclui as variáveis não temporais. Com
 `VARMODE=time-series`, o runner usa `full_processed.parquet` e oferece ao modelo
 somente `time` e os atributos derivados das séries temporais. Ausências em
-variáveis não temporais, como `cisq`, não removem pacientes nesse modo.
+variáveis não temporais, como `cisq`, não removem pacientes nesse modo. O shell
+repassa `VARMODE` à preparação para que o mesmo critério seja usado na criação
+da base limpa.
 
 ## Divisão dos dados
 

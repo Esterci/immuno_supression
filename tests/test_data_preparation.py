@@ -28,6 +28,21 @@ class PreparationTest(unittest.TestCase):
         self.assertEqual(result["cisq"].tolist(), [7.0, 7.0, 7.0])
         self.assertFalse(result["cisq"].isna().any())
 
+    def test_time_series_cleaning_ignores_missing_non_temporal_data(self):
+        frame = pd.DataFrame(
+            {
+                "id": [1, 1, 2, 2],
+                "time": [0, 1, 0, 1],
+                "cisq": [7.0, 7.0, np.nan, np.nan],
+                "lym": [1.0, 2.0, 3.0, 4.0],
+                "dv_tac": [1.0, 2.0, 3.0, 4.0],
+            }
+        )
+
+        result = data_cleaning(frame, var_mode="time-series")
+
+        self.assertEqual(result["id"].unique().tolist(), [1, 2])
+
     def test_occ5_removed_before_matching_and_interpolation(self):
         lr = pd.DataFrame(
             {

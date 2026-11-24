@@ -61,6 +61,12 @@ def parse_args(argv=None):
         default=[1],
         help="Uma ou mais ocasiões mantidas antes do merge (padrão: 1)",
     )
+    parser.add_argument(
+        "--var-mode",
+        choices=["all", "time-series"],
+        default="all",
+        help="Define quais variáveis determinam a elegibilidade dos pacientes",
+    )
 
     args = parser.parse_args(argv)
 
@@ -380,7 +386,7 @@ def ts_interpolation(df_final):
 # ---------------------------------------------------------
 
 
-def data_cleaning(final_df):
+def data_cleaning(final_df, var_mode="all"):
 
     print("\n[4/5] Criando base limpa...")
 
@@ -395,8 +401,13 @@ def data_cleaning(final_df):
     # função seja chamada com dados que não passaram por translating_flags().
     final_df = propagate_non_temporal_columns(final_df)
 
+    if var_mode not in {"all", "time-series"}:
+        raise ValueError("var_mode deve ser all ou time-series")
+    excluded = {"id", "time"}
+    if var_mode == "time-series":
+        excluded.update(NON_TEMPORAL_COLUMNS)
     colunas_medidas = [
-        coluna for coluna in final_df.columns if coluna not in {"id", "time"}
+        coluna for coluna in final_df.columns if coluna not in excluded
     ]
 
     antes = len(final_df)
@@ -414,6 +425,14 @@ def data_cleaning(final_df):
     print(f"  Linhas antes: {antes}")
     print(f"  Linhas depois: {depois}")
     print(f"  Linhas removidas: {antes - depois}")
+    print(
+        "  Critério de elegibilidade: "
+        + (
+            "somente séries temporais e alvo"
+            if var_mode == "time-series"
+            else "todas as variáveis"
+        )
+    )
     print(
         "  Pacientes removidos sem nenhuma medida em pelo menos uma variável: "
         f"{pacientes_antes - pacientes_depois}"
@@ -500,6 +519,7 @@ def main(argv=None):
                 "best_methods.csv"
             ),
         },
+        "modo_variaveis": args.var_mode,
     }
 
     metadata["selecao_occ"] = {
@@ -523,7 +543,7 @@ def main(argv=None):
 
     metadata["etapas"]["apos_flags_e_preenchimento"] = dataset_metadata(final_df)
 
-    clean_df = data_cleaning(final_df)
+    clean_df = data_cleaning(final_df, args.var_mode)
     metadata["depois"] = {
         "full_processed": dataset_metadata(final_df),
         "clean_processed": dataset_metadata(clean_df),

@@ -112,6 +112,24 @@ STAGES = {
 
 BINARY_SERIES = {"infection", "other_infection", "cmv_infection", "bkv_infection"}
 
+OCCASIONS = {
+    1: "Primeira semana",
+    2: "Mês 1",
+    3: "Mês 2",
+    4: "Mês 3",
+    5: "Mês 6",
+}
+
+
+def occasion_options() -> list[dict[str, int | str]]:
+    return [
+        {
+            "label": f"Ocorrência {occasion} — {description}",
+            "value": occasion,
+        }
+        for occasion, description in OCCASIONS.items()
+    ]
+
 
 def format_study_date(value: str | None) -> str:
     if not value:
@@ -310,11 +328,19 @@ def style_figure(figure: go.Figure, title: str, y_title: str) -> go.Figure:
     return figure
 
 
-def original_patient_series(patient_id: int) -> dict[str, pd.DataFrame]:
+def original_patient_series(
+    patient_id: int, occasion: int | None = None
+) -> dict[str, pd.DataFrame]:
     """Prepare concentrations, recorded doses and biomarker values for a patient."""
     tac = DATA["tacrolimus"]
     mpa = DATA["mpa"]
     mir = DATA["mir155"]
+
+    if occasion is not None:
+        occasion = int(occasion)
+        tac = tac.loc[pd.to_numeric(tac["OCC"], errors="coerce") == occasion]
+        mpa = mpa.loc[pd.to_numeric(mpa["OCC"], errors="coerce") == occasion]
+        mir = mir.loc[pd.to_numeric(mir["OCC"], errors="coerce") == occasion]
 
     tac_observations = tac.loc[
         (tac["#ID"] == patient_id) & (tac["MDV"] == 0) & (tac["EVID"] == 0)
@@ -388,6 +414,18 @@ def original_patient_series(patient_id: int) -> dict[str, pd.DataFrame]:
     }
 
 
+@lru_cache(maxsize=None)
+def population_measure_counts(series_key: str, occasion: int) -> pd.DataFrame:
+    """Count original measurements for every patient in one occasion."""
+    if series_key not in SERIES:
+        raise ValueError(f"Série desconhecida: {series_key}")
+    rows = []
+    for patient_id in PATIENT_IDS:
+        frame = original_patient_series(patient_id, occasion)[series_key]
+        rows.append({"patient_id": patient_id, "count": len(frame)})
+    return pd.DataFrame(rows)
+
+
 def processed_patient_series(
     frame: pd.DataFrame, patient_id: int
 ) -> dict[str, pd.DataFrame]:
@@ -444,12 +482,18 @@ def series_by_stage(
 
 
 def original_figure(
-    patient_id: int, selected_series: list[str] | None, plot_type: str
+    patient_id: int,
+    occasion: int | None,
+    selected_series: list[str] | None,
+    plot_type: str,
 ) -> go.Figure:
-    frames = original_patient_series(patient_id)
+    frames = original_patient_series(patient_id, occasion)
     selected_series = selected_series or []
+    title = "Séries temporais originais"
+    if occasion is not None:
+        title += f" — ocorrência {int(occasion)}"
     if not selected_series:
-        return empty_figure("Séries temporais originais", "Selecione uma série")
+        return empty_figure(title, "Selecione uma série")
 
     colors = {
         "tac_concentration": "#2563eb",
@@ -484,12 +528,50 @@ def original_figure(
             )
         )
     if not figure.data:
-        return empty_figure("Séries temporais originais")
-    figure = style_figure(
-        figure, "Séries temporais originais", "Valor na unidade original"
-    )
+        return empty_figure(title)
+    figure = style_figure(figure, title, "Valor na unidade original")
     maximum_time = max(max(trace.x) for trace in figure.data)
     figure.update_xaxes(range=[0, maximum_time * 1.02 if maximum_time > 0 else 1])
+    return figure
+
+
+def population_count_histogram(series_key: str, occasion: int) -> go.Figure:
+    """Plot the distribution of patient measurement counts for one occasion."""
+    if series_key not in SERIES or int(occasion) not in OCCASIONS:
+        return empty_figure(
+            "Distribuição do número de medidas", "Selecione variável e ocorrência"
+        )
+    occasion = int(occasion)
+    counts = population_measure_counts(series_key, occasion)
+    maximum = int(counts["count"].max()) if not counts.empty else 0
+    figure = go.Figure(
+        go.Histogram(
+            x=counts["count"],
+            xbins={"start": -0.5, "end": maximum + 0.5, "size": 1},
+            marker={"color": "#2563eb", "line": {"color": "white", "width": 1}},
+            hovertemplate=(
+                "Número de medidas: %{x}<br>Pacientes: %{y}<extra></extra>"
+            ),
+        )
+    )
+    figure.update_layout(
+        title={
+            "text": (
+                f"Distribuição por paciente — {SERIES[series_key]} — "
+                f"ocorrência {occasion}"
+            ),
+            "x": 0.02,
+        },
+        template="plotly_white",
+        height=430,
+        margin={"l": 65, "r": 25, "t": 70, "b": 60},
+        bargap=0.08,
+        xaxis_title="Número de medidas originais por paciente",
+        yaxis_title="Número de pacientes",
+        showlegend=False,
+    )
+    figure.update_xaxes(dtick=1, rangemode="tozero")
+    figure.update_yaxes(dtick=1, rangemode="tozero")
     return figure
 
 
@@ -694,6 +776,43 @@ app.layout = html.Main(
             "Visualização conjunta das medidas originais, sem merge ou interpolação.",
             style={"color": "#475569", "marginTop": 0},
         ),
+        html.H2("Visão geral de todos os pacientes", style={"marginBottom": "4px"}),
+        html.P(
+            "Distribuição do número de medidas originais por paciente na variável e "
+            "ocorrência selecionadas. Pacientes sem medidas entram na contagem zero.",
+            style={"color": "#475569", "marginTop": 0},
+        ),
+        html.Label(
+            "Variável",
+            htmlFor="population-series-select",
+            style={"fontWeight": 600},
+        ),
+        dcc.Dropdown(
+            id="population-series-select",
+            options=[{"label": label, "value": key} for key, label in SERIES.items()],
+            value="lymphocytes",
+            clearable=False,
+            searchable=True,
+            style={"maxWidth": "520px", "marginTop": "6px"},
+        ),
+        html.Label(
+            "Ocorrência",
+            htmlFor="occasion-select",
+            style={"fontWeight": 600, "display": "block", "marginTop": "18px"},
+        ),
+        dcc.Dropdown(
+            id="occasion-select",
+            options=occasion_options(),
+            value=1,
+            clearable=False,
+            searchable=False,
+            style={"maxWidth": "520px", "marginTop": "6px"},
+        ),
+        html.Div(
+            dcc.Graph(id="population-count-histogram"),
+            style={**CARD_STYLE, "marginTop": "14px", "marginBottom": "36px"},
+        ),
+        html.H2("Visualização por paciente", style={"marginBottom": "14px"}),
         html.Label("Paciente", htmlFor="patient-select", style={"fontWeight": 600}),
         dcc.Dropdown(
             id="patient-select",
@@ -791,13 +910,26 @@ app.layout = html.Main(
 @app.callback(
     Output("original-timeseries-graph", "figure"),
     Input("patient-select", "value"),
+    Input("occasion-select", "value"),
     Input("original-series-select", "value"),
     Input("plot-type", "value"),
 )
 def update_original_graph(
-    patient_id: int, selected_series: list[str] | None, plot_type: str
+    patient_id: int,
+    occasion: int,
+    selected_series: list[str] | None,
+    plot_type: str,
 ):
-    return original_figure(int(patient_id), selected_series, plot_type)
+    return original_figure(int(patient_id), occasion, selected_series, plot_type)
+
+
+@app.callback(
+    Output("population-count-histogram", "figure"),
+    Input("population-series-select", "value"),
+    Input("occasion-select", "value"),
+)
+def update_population_count_histogram(series_key: str, occasion: int):
+    return population_count_histogram(series_key, occasion)
 
 
 @app.callback(Output("study-description", "children"), Input("study-select", "value"))
