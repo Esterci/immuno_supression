@@ -16,12 +16,17 @@ para cada medida observada de `lym`. As entradas são:
 - `tend_<variável>`: inclinação entre as duas observações mais recentes.
 
 Somente observações do mesmo paciente com `time` estritamente menor que o tempo
-do alvo são elegíveis. `lym` não gera atributos históricos, evitando que o valor do alvo
-entre nas features. `id` também não entra no modelo: ele é preservado apenas para
-separar os grupos.
+do alvo são elegíveis. Com `USE_LYM=1`, o histórico anterior de `lym` gera os mesmos
+quatro atributos temporais; o valor de LYM no instante previsto nunca entra nas
+features. Com `USE_LYM=0`, nenhum atributo de LYM é usado como entrada. `id` também
+não entra no modelo: ele é preservado apenas para separar os grupos.
 
 Se qualquer feature temporal gerada estiver ausente, a medida de `lym`
 correspondente é considerada não previsível e removida antes da divisão.
+Após essa formatação, o runner informa no terminal e em `run.log` quantos pacientes
+continuam elegíveis e quantos foram removidos por histórico temporal insuficiente.
+As mesmas contagens ficam em `metadata.json` nos campos
+`patients_after_formatting` e `patients_removed_during_formatting`.
 O MinMax de todas as features é ajustado somente nas linhas de treino de cada fold. O alvo
 `lym` também recebe MinMax durante o ajuste, e as previsões são automaticamente
 devolvidas à escala original. Métricas e plots incluem somente medidas previsíveis.
@@ -65,7 +70,8 @@ python -m runners.run_ml_experiment \
   --test-size 0.2 --normalization all --shap-samples 100
 ```
 
-O shell aceita `OCC`, `VARMODE`, `SEARCHES`, `FOLDS`, `SEEDS`, `N_ITER`, `N_JOBS`, `OUTPUT_DIR`,
+O shell aceita `OCC`, `VARMODE`, `USE_LYM` (`0` ou `1`), `SEARCHES`, `FOLDS`,
+`SEEDS`, `N_ITER`, `N_JOBS`, `OUTPUT_DIR`,
 `PREPARE_DATA` e argumentos adicionais do runner. `--quick` usa uma grade pequena
 apenas para validar o fluxo.
 
@@ -78,7 +84,10 @@ Cada experimento registra:
 - `splits.csv` para auditoria por paciente;
 - métricas, parâmetros, resultados de CV, previsões e modelo serializado;
 - `model_comparison_rmse.png`, `model_comparison_mae.png` e
-  `model_comparison_mape.png`, em figuras separadas;
+  `model_comparison_mape.png`, em figuras separadas, com barras de erro de ±1
+  desvio padrão das métricas entre pacientes;
+- `results.csv` com RMSE, MAE e MAPE globais e suas colunas `*_patient_sd` de
+  desvio padrão entre pacientes;
 - gráficos e tabelas SHAP;
 - análise temporal por paciente.
 

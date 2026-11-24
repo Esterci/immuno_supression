@@ -18,10 +18,11 @@ def write_json(path, data):
     )
 
 
-def regression_metrics(y, prediction):
+def regression_metrics(y, prediction, groups=None):
     y = np.asarray(y)
+    prediction = np.asarray(prediction)
     nonzero = y != 0
-    return {
+    metrics = {
         "rmse": float(np.sqrt(mean_squared_error(y, prediction))),
         "mae": float(mean_absolute_error(y, prediction)),
         "r2": float(r2_score(y, prediction)) if len(y) > 1 and np.var(y) > 0 else None,
@@ -34,6 +35,49 @@ def regression_metrics(y, prediction):
         ),
         "mape_excluded_zeros": int((~nonzero).sum()),
     }
+    # Repeated measurements from the same patient are not independent.  Report
+    # dispersion across patient-level metrics, while retaining the pooled
+    # (per-observation) estimates above for backwards compatibility.
+    if groups is None:
+        groups = np.arange(len(y))
+    groups = np.asarray(groups)
+    if len(groups) != len(y):
+        raise ValueError("groups must have the same length as y")
+
+    by_group = []
+    for group in pd.unique(groups):
+        selected = groups == group
+        group_y = y[selected]
+        group_prediction = prediction[selected]
+        group_nonzero = group_y != 0
+        by_group.append(
+            {
+                "rmse": float(np.sqrt(mean_squared_error(group_y, group_prediction))),
+                "mae": float(mean_absolute_error(group_y, group_prediction)),
+                "mape_percent_nonzero": (
+                    float(
+                        100
+                        * np.mean(
+                            np.abs(
+                                (group_y[group_nonzero]
+                                - group_prediction[group_nonzero])
+                                / group_y[group_nonzero]
+                            )
+                        )
+                    )
+                    if group_nonzero.any()
+                    else np.nan
+                ),
+            }
+        )
+    patient_metrics = pd.DataFrame(by_group)
+    for metric in ("rmse", "mae", "mape_percent_nonzero"):
+        values = patient_metrics[metric].dropna()
+        metrics[f"{metric}_patient_sd"] = (
+            float(values.std(ddof=1)) if len(values) > 1 else None
+        )
+    metrics["metric_patient_count"] = int(len(patient_metrics))
+    return metrics
 
 
 def prediction_plot(y, prediction, path):
@@ -160,23 +204,33 @@ def summarize(results, output):
     print("\nResultados no conjunto de teste:")
     print(table.to_string(index=False))
     comparisons = (
-        ("rmse", "RMSE", "%.3f", "RMSE de teste"),
-        ("mae", "MAE", "%.3f", "MAE de teste"),
+        ("rmse", "rmse_patient_sd", "RMSE", "%.3f", "RMSE de teste"),
+        ("mae", "mae_patient_sd", "MAE", "%.3f", "MAE de teste"),
         (
             "mape_percent_nonzero",
+            "mape_percent_nonzero_patient_sd",
             "MAPE",
             "%.2f%%",
             "Erro percentual absoluto médio (MAPE, %)",
         ),
     )
-    for metric, label, value_format, y_label in comparisons:
+    for metric, sd_metric, label, value_format, y_label in comparisons:
         comparison = table.dropna(subset=[metric])
         fig, ax = plt.subplots(figsize=(8, 4.5))
-        bars = ax.bar(comparison["model"], comparison[metric])
+        errors = comparison[sd_metric].fillna(0) if sd_metric in comparison else None
+        bars = ax.bar(
+            comparison["model"],
+            comparison[metric],
+            yerr=errors,
+            capsize=5,
+        )
         ax.bar_label(bars, fmt=value_format, padding=3)
         ax.set(
             ylabel=y_label,
-            title=f"Comparação dos modelos por {label} — medidas previsíveis",
+            title=(
+                f"Comparação dos modelos por {label} — medidas previsíveis\n"
+                "Barras de erro: ±1 DP entre pacientes"
+            ),
         )
         ax.grid(axis="y", alpha=0.25)
         fig.tight_layout()

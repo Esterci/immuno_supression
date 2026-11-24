@@ -493,7 +493,7 @@ def main(argv=None):
     )
 
     metadata = {
-        "versao": 3,
+        "versao": 4,
         "gerado_em_utc": datetime.now(timezone.utc).isoformat(),
         "definicao_missing": (
             "Valores reconhecidos por pandas.isna (NaN, None, NA, NaT). "
@@ -507,23 +507,14 @@ def main(argv=None):
             "tacrolimus": dataset_metadata(tacrolimus_df),
         },
         "etapas": {},
-        "interpolacao": {
-            "metodos_por_serie": INTERPOLATION_METHODS,
-            "escopo": "Por paciente, usando o tempo real",
-            "tratamento_das_bordas": (
-                "Lacunas antes/depois da faixa observada recebem o valor "
-                "observado mais próximo; pacientes sem observações permanecem ausentes"
-            ),
-            "origem": (
-                "studies/interpolation/study_20261021T153733Z_patient_loocv/"
-                "best_methods.csv"
-            ),
-        },
+        # O fluxo de preparação atual preserva lacunas temporais. Métodos e
+        # parâmetros só devem ser registrados quando ts_interpolation for usado.
+        "interpolacao": {"aplicada": False},
         "modo_variaveis": args.var_mode,
     }
 
     metadata["selecao_occ"] = {
-        "momento": "Antes do merge, preenchimento e interpolação",
+        "momento": "Antes do merge e do tratamento de flags",
         "ocasioes_mantidas": args.occ,
         "linhas_removidas": removed_by_source,
     }
@@ -548,15 +539,19 @@ def main(argv=None):
         "full_processed": dataset_metadata(final_df),
         "clean_processed": dataset_metadata(clean_df),
     }
-    metadata["comparacao_com_lr_input"] = {
-        name: {
-            "linhas_removidas": len(lr_input_df) - len(df),
-            "pacientes_removidos": int(
-                lr_input_df.loc[~lr_input_df["id"].isin(df["id"]), "id"].nunique()
-            ),
+    reference_ids = set(lr_input_df["id"].dropna().unique())
+    metadata["comparacao_com_lr_input"] = {}
+    for name, frame in (
+        ("full_processed", final_df),
+        ("clean_processed", clean_df),
+    ):
+        output_ids = set(frame["id"].dropna().unique())
+        metadata["comparacao_com_lr_input"][name] = {
+            "linhas_entrada_referencia": len(lr_input_df),
+            "linhas_saida": len(frame),
+            "pacientes_ausentes_na_saida": len(reference_ids - output_ids),
+            "pacientes_adicionados_na_saida": len(output_ids - reference_ids),
         }
-        for name, df in (("full_processed", final_df), ("clean_processed", clean_df))
-    }
 
     print("\n[5/5] Salvando bases em formato Parquet...")
 

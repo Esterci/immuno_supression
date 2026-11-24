@@ -36,7 +36,7 @@ class MLMethodsTest(unittest.TestCase):
 
     def test_measurement_format_uses_history_without_target_leakage(self):
         raw = self.data().sort_values(["id", "time"])
-        X, y, rows = prepare_measurement_features(raw)
+        X, y, rows = prepare_measurement_features(raw, use_lym=False)
 
         self.assertEqual(len(X), 3 * raw["id"].nunique())
         self.assertIn("time", X.columns)
@@ -63,6 +63,27 @@ class MLMethodsTest(unittest.TestCase):
         )
         np.testing.assert_array_equal(rows.loc[patient, "time"], [2, 3, 4])
         self.assertFalse(X.isna().any().any())
+
+    def test_measurement_format_optionally_uses_only_previous_lym(self):
+        raw = self.data().sort_values(["id", "time"])
+
+        with_lym, target, rows = prepare_measurement_features(raw, use_lym=True)
+        without_lym, _, _ = prepare_measurement_features(raw, use_lym=False)
+
+        self.assertTrue(
+            {"initial_lym", "d_time_lym", "val_lym", "tend_lym"}.issubset(
+                with_lym.columns
+            )
+        )
+        self.assertFalse(any(column.endswith("_lym") for column in without_lym))
+        patient = rows["id"].eq(0)
+        np.testing.assert_array_equal(with_lym.loc[patient, "val_lym"], [1, 2, 3])
+        np.testing.assert_array_equal(target.loc[patient], [2, 3, 4])
+
+        changed = raw.copy()
+        changed.loc[(changed["id"] == 0) & (changed["time"] == 4), "lym"] = 999
+        changed_X, _, _ = prepare_measurement_features(changed, use_lym=True)
+        pd.testing.assert_frame_equal(with_lym, changed_X)
 
     def test_all_pipeline_normalizes_measurement_features(self):
         X, y, rows = prepare_measurement_features(self.data())
@@ -258,6 +279,24 @@ class MLMethodsTest(unittest.TestCase):
         self.assertIsNone(result["r2"])
         self.assertIsNone(result["mape_percent_nonzero"])
         self.assertEqual(result["mape_excluded_zeros"], 2)
+
+    def test_metric_standard_deviation_is_calculated_between_patients(self):
+        result = regression_metrics(
+            [1, 3, 2, 6],
+            [0, 2, 0, 2],
+            groups=[10, 10, 20, 20],
+        )
+
+        # Patient RMSE values are 1 and sqrt(10); MAE values are 1 and 3.
+        self.assertAlmostEqual(
+            result["rmse_patient_sd"], np.std([1, np.sqrt(10)], ddof=1)
+        )
+        self.assertAlmostEqual(result["mae_patient_sd"], np.std([1, 3], ddof=1))
+        self.assertAlmostEqual(
+            result["mape_percent_nonzero_patient_sd"],
+            np.std([100 * (1 + 1 / 3) / 2, 100 * (1 + 4 / 6) / 2], ddof=1),
+        )
+        self.assertEqual(result["metric_patient_count"], 2)
 
 
 if __name__ == "__main__":

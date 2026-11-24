@@ -1,0 +1,36 @@
+============================================================
+INICIANDO PREPARAÇÃO DOS DADOS
+============================================================
+
+[1/5] Lendo bases de dados...
+  lr_input carregado: 1525 linhas | 58 pacientes
+  MPA carregado: 1527 linhas | 56 pacientes
+  Tacrolimus carregado: 1596 linhas | 58 pacientes
+
+[2/5] Realizando merge das bases...
+  Associando dados de Tacrolimus...
+  Associando dados de MPA...
+  Merge concluído: 137 linhas x 27 colunas
+
+[3/5] Tratando flags e valores ausentes...
+  NaNs em dv_tac antes: 10
+  NaNs em dv_map antes: 21
+  Propagando dados não temporais dentro de cada paciente...
+  Tratamento das flags concluído.
+
+[4/5] Criando base limpa...
+  Linhas antes: 137
+  Linhas depois: 97
+  Linhas removidas: 40
+  Critério de elegibilidade: somente séries temporais e alvo
+  Pacientes removidos sem nenhuma medida em pelo menos uma variável: 12
+  Pacientes restantes: 24
+
+[5/5] Salvando bases em formato Parquet...
+  Salvo: data/full_processed.parquet (137 linhas)
+  Salvo: data/clean_processed.parquet (97 linhas)
+  Metadados salvos: data/data_preparation_metadata.json
+
+============================================================
+PREPARAÇÃO DOS DADOS CONCLUÍDA
+============================================================

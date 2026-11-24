@@ -29,27 +29,32 @@ from utils.analyze_patient_timeseries import analyze as analyze_patient_timeseri
 BASE = Path(__file__).resolve().parents[1]
 
 
-def prepare_measurement_features(data, target="lym", var_mode="all"):
+def prepare_measurement_features(data, target="lym", var_mode="all", use_lym=True):
     """Formata uma linha por medida do alvo usando apenas o histórico disponível."""
     if var_mode not in {"all", "time-series"}:
         raise ValueError("var_mode deve ser all ou time-series")
     required = {"id", "time", target}
+
     if missing := sorted(required - set(data.columns)):
         raise ValueError(f"Colunas ausentes: {missing}")
     if data[["id", "time"]].isna().any().any():
         raise ValueError("id e time não podem conter valores ausentes")
 
     data = data.sort_values(["id", "time"], kind="stable").copy()
+
     available_static_columns = [
         column
         for column in NON_TEMPORAL_COLUMNS
         if column in data.columns and column not in {"id", "time", target}
     ]
+
     static_columns = available_static_columns if var_mode == "all" else []
+
+    excluded_temporal_columns = {*available_static_columns, "id", "time"}
+    if not use_lym:
+        excluded_temporal_columns.add(target)
     temporal_columns = [
-        column
-        for column in data.columns
-        if column not in {*available_static_columns, "id", "time", target}
+        column for column in data.columns if column not in excluded_temporal_columns
     ]
 
     target_rows = data[target].notna()
@@ -125,9 +130,8 @@ def prepare_measurement_features(data, target="lym", var_mode="all"):
         )
     if X.isna().any().any():
         missing = X.columns[X.isna().any()].tolist()
-        raise ValueError(
-            "Features não temporais contêm valores ausentes: " f"{missing}"
-        )
+        raise ValueError("Features contêm valores ausentes: " f"{missing}")
+
     return (
         X.reset_index(drop=True),
         y.reset_index(drop=True),
@@ -156,9 +160,7 @@ def parse_args(argv=None):
         "--data",
         type=Path,
         default=None,
-        help=(
-            "Parquet de entrada. Por padrão usa clean_processed.parquet."
-        ),
+        help=("Parquet de entrada. Por padrão usa clean_processed.parquet."),
     )
     parser.add_argument("--output-dir", type=Path, default=BASE / "studies/ml")
     parser.add_argument("--search", choices=["grid", "random"], default="random")
@@ -188,13 +190,15 @@ def parse_args(argv=None):
         action="store_true",
         help="Grade pequena para validar o fluxo; não usar como estudo final",
     )
+    parser.add_argument(
+        "--use-lym",
+        type=int,
+        choices=[0, 1],
+        default=1,
+        help="Usa (1) ou não usa (0) o histórico de linfócitos como entrada",
+    )
     args = parser.parse_args(argv)
-    if (
-        args.folds < 2
-        or args.n_iter < 1
-        or args.n_jobs == 0
-        or args.seed < 0
-    ):
+    if args.folds < 2 or args.n_iter < 1 or args.n_jobs == 0 or args.seed < 0:
         parser.error("Exige folds >= 2, n-iter >= 1, n-jobs != 0, seed >= 0")
     if (
         not 0 < args.test_size < 1
@@ -202,6 +206,7 @@ def parse_args(argv=None):
     ):
         parser.error("Exige 0 < test-size < 1 e parâmetros SHAP positivos")
     args.models = list(dict.fromkeys(args.models))
+    args.use_lym = bool(args.use_lym)
     if args.data is None:
         filename = (
             "full_processed.parquet"
@@ -217,8 +222,26 @@ def execute(args, output, metadata):
 
     data = pd.read_parquet(args.data)
     X, y, rows = prepare_measurement_features(
-        data, target="lym", var_mode=args.var_mode
+        data, target="lym", var_mode=args.var_mode, use_lym=args.use_lym
     )
+    patients_before_formatting = int(data["id"].nunique())
+    patients_after_formatting = int(rows["id"].nunique())
+    patients_removed_during_formatting = (
+        patients_before_formatting - patients_after_formatting
+    )
+    print(
+        "\nPacientes elegíveis para a análise após a formatação temporal:\n"
+        f"  Antes de prepare_measurement_features: {patients_before_formatting}\n"
+        f"  Depois de prepare_measurement_features: {patients_after_formatting}\n"
+        f"  Removidos por histórico temporal insuficiente: "
+        f"{patients_removed_during_formatting}"
+    )
+    metadata.update(
+        patients_before=patients_before_formatting,
+        patients_after_formatting=patients_after_formatting,
+        patients_removed_during_formatting=patients_removed_during_formatting,
+    )
+    write_json(output / "metadata.json", metadata)
     train, test = next(
         GroupShuffleSplit(
             n_splits=1, test_size=args.test_size, random_state=args.seed
@@ -245,7 +268,9 @@ def execute(args, output, metadata):
         data["id"].isin(test_patient_ids) & data["lym"].notna(),
         ["id", "time", "lym"],
     ].sort_values(["id", "time"], kind="stable")
+
     test_target_series.to_csv(output / "test_target_series.csv", index=False)
+
     pd.concat([X, y.rename("lym")], axis=1).describe().to_csv(
         output / "input_summary.csv"
     )
@@ -257,10 +282,8 @@ def execute(args, output, metadata):
         target_measurements_removed_without_history=int(
             data["lym"].notna().sum() - len(X)
         ),
-        patients_before=int(data.id.nunique()),
         missing_before=int(data.isna().sum().sum()),
         missing_features=int(X.isna().sum().sum()),
-        patients_after_formatting=int(rows.id.nunique()),
         train_rows=len(train),
         test_rows=len(test),
         train_patients=int(groups.nunique()),
@@ -270,9 +293,18 @@ def execute(args, output, metadata):
         feature_format={
             "mode": "measurement_history",
             "variable_mode": args.var_mode,
-            "description": "Uma linha por medida de LYM; estáticas e tempo atual, mais valor inicial, último valor, tempo desde o último valor e tendência das séries temporais.",
+            "description": (
+                "Uma linha por medida de LYM; estáticas e tempo atual, mais "
+                "valor inicial, último valor, tempo desde o último valor e "
+                "tendência das séries temporais. O histórico anterior de LYM "
+                f"{'é' if args.use_lym else 'não é'} usado como entrada."
+            ),
             "feature_count": len(X.columns),
-            "target_excluded_from_history": True,
+            "uses_target_history": args.use_lym,
+            "target_excluded_from_history": not args.use_lym,
+            "target_history_scope": (
+                "strictly_previous_measurements" if args.use_lym else "excluded"
+            ),
         },
         protocol="GroupShuffleSplit para teste; GroupKFold apenas no treino; refit no treino completo",
         normalization={
@@ -286,10 +318,26 @@ def execute(args, output, metadata):
         preprocessing_note="Atributos históricos usam somente observações no mesmo paciente com time < ao time do alvo. Medidas de LYM com qualquer feature temporal ausente são excluídas. ID é usado apenas para agrupamento. Todas as features restantes são normalizadas somente com dados de treino em cada fold.",
         search_scoring="r2",
         metrics_weighting="Por observação, não por paciente",
+        metrics_dispersion=(
+            "Desvio padrão amostral (ddof=1) de RMSE, MAE e MAPE calculados "
+            "separadamente por paciente no conjunto de teste"
+        ),
         models={},
     )
+
     prep_metadata = args.data.parent / "data_preparation_metadata.json"
     if prep_metadata.exists():
+        preparation = json.loads(prep_metadata.read_text(encoding="utf-8"))
+        selection = preparation.get("selecao_occ") or {}
+        interpolation = preparation.get("interpolacao") or {}
+        metadata["data_preparation"] = {
+            "occasions": selection.get("ocasioes_mantidas", []),
+            "interpolation_applied": bool(interpolation.get("aplicada", False)),
+        }
+        if interpolation.get("aplicada"):
+            metadata["data_preparation"]["interpolation_methods"] = interpolation.get(
+                "metodos_por_serie", {}
+            )
         shutil.copy2(prep_metadata, output / "data_preparation_metadata.json")
     write_json(output / "metadata.json", metadata)
     print(
@@ -318,7 +366,9 @@ def execute(args, output, metadata):
         search.fit(X_train, y_train, groups=groups)
         fit_seconds = time.perf_counter() - start
         prediction = search.predict(X_test)
-        metrics = regression_metrics(y_test, prediction)
+        metrics = regression_metrics(
+            y_test, prediction, groups=rows.iloc[test]["id"].to_numpy()
+        )
         metrics.update(
             model=name, cv_r2=float(search.best_score_), fit_seconds=fit_seconds
         )
@@ -356,14 +406,19 @@ def execute(args, output, metadata):
         write_json(output / "metadata.json", metadata)
         results.append(metrics)
         pd.DataFrame(results).to_csv(output / "results.csv", index=False)
+
     summarize(results, output)
+
     print("\nGerando análise temporal por paciente...")
+
     patient_analysis = analyze_patient_timeseries(output, require_complete=False)
+
     metadata["patient_temporal_analysis"] = {
         "status": "complete",
         "criterion": "RMSE por paciente no conjunto de teste",
         "directory": str(patient_analysis.relative_to(output)),
     }
+
     write_json(output / "metadata.json", metadata)
 
 
@@ -372,7 +427,11 @@ def main(argv=None):
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%fZ")
     output = (
         args.output_dir.resolve()
-        / f"{stamp}_{args.search}_{args.normalization}_vars-{args.var_mode}_measurement-history_folds{args.folds}_seed{args.seed}"
+        / (
+            f"{stamp}_{args.search}_{args.normalization}_vars-{args.var_mode}_"
+            f"lym-history-{'on' if args.use_lym else 'off'}_"
+            f"measurement-history_folds{args.folds}_seed{args.seed}"
+        )
     )
     output.mkdir(parents=True, exist_ok=False)
     metadata = {

@@ -1,0 +1,38 @@
+
+Pacientes elegíveis para a análise após a formatação temporal:
+  Antes de prepare_measurement_features: 58
+  Depois de prepare_measurement_features: 50
+  Removidos por histórico temporal insuficiente: 8
+Experimento: /home/thiago.esterci/Repositories/immuno_supression/studies/ml/study_20261124T191415Z_aGlLCS/20261124T191421_226831Z_random_all_vars-time-series_measurement-history_folds5_seed42
+Treino: 775 linhas; teste: 186 linhas
+
+random_forest: 30 candidatos x 5 folds + refit
+Fitting 5 folds for each of 30 candidates, totalling 150 fits
+  R² CV: 0.8616; RMSE teste: 2.5805; calculando SHAP...
+PermutationExplainer explainer:  71%|#######1  | 71/100 [00:00<?, ?it/s]PermutationExplainer explainer:  73%|#######3  | 73/100 [00:10<00:01, 18.34it/s]PermutationExplainer explainer:  75%|#######5  | 75/100 [00:10<00:02, 10.79it/s]PermutationExplainer explainer:  77%|#######7  | 77/100 [00:10<00:02,  9.26it/s]PermutationExplainer explainer:  79%|#######9  | 79/100 [00:10<00:02,  9.06it/s]PermutationExplainer explainer:  80%|########  | 80/100 [00:10<00:02,  9.08it/s]PermutationExplainer explainer:  81%|########1 | 81/100 [00:11<00:02,  8.96it/s]PermutationExplainer explainer:  82%|########2 | 82/100 [00:11<00:02,  8.91it/s]PermutationExplainer explainer:  83%|########2 | 83/100 [00:11<00:01,  8.91it/s]PermutationExplainer explainer:  84%|########4 | 84/100 [00:11<00:01,  8.87it/s]PermutationExplainer explainer:  85%|########5 | 85/100 [00:11<00:01,  8.85it/s]PermutationExplainer explainer:  86%|########6 | 86/100 [00:11<00:01,  8.78it/s]PermutationExplainer explainer:  87%|########7 | 87/100 [00:11<00:01,  8.83it/s]PermutationExplainer explainer:  88%|########8 | 88/100 [00:11<00:01,  8.81it/s]PermutationExplainer explainer:  89%|########9 | 89/100 [00:11<00:01,  9.00it/s]PermutationExplainer explainer:  90%|######### | 90/100 [00:12<00:01,  9.19it/s]PermutationExplainer explainer:  91%|#########1| 91/100 [00:12<00:00,  9.23it/s]PermutationExplainer explainer:  92%|#########2| 92/100 [00:12<00:00,  9.44it/s]PermutationExplainer explainer:  93%|#########3| 93/100 [00:12<00:00,  9.45it/s]PermutationExplainer explainer:  94%|#########3| 94/100 [00:12<00:00,  9.43it/s]PermutationExplainer explainer:  95%|#########5| 95/100 [00:12<00:00,  9.33it/s]PermutationExplainer explainer:  96%|#########6| 96/100 [00:12<00:00,  9.36it/s]PermutationExplainer explainer:  97%|#########7| 97/100 [00:12<00:00,  9.43it/s]PermutationExplainer explainer:  98%|#########8| 98/100 [00:12<00:00,  9.36it/s]PermutationExplainer explainer:  99%|#########9| 99/100 [00:13<00:00,  9.41it/s]PermutationExplainer explainer: 100%|##########| 100/100 [00:13<00:00,  9.33it/s]PermutationExplainer explainer: 101it [00:13,  9.44it/s]                         PermutationExplainer explainer: 101it [00:13,  2.26it/s]
+
+gradient_boosting: 30 candidatos x 5 folds + refit
+Fitting 5 folds for each of 30 candidates, totalling 150 fits
+  R² CV: 0.8597; RMSE teste: 2.3867; calculando SHAP...
+
+adaboost: 30 candidatos x 5 folds + refit
+Fitting 5 folds for each of 30 candidates, totalling 150 fits
+  R² CV: 0.8154; RMSE teste: 3.0393; calculando SHAP...
+PermutationExplainer explainer:  85%|########5 | 85/100 [00:00<?, ?it/s]PermutationExplainer explainer:  87%|########7 | 87/100 [00:10<00:00, 16.56it/s]PermutationExplainer explainer:  89%|########9 | 89/100 [00:10<00:01, 10.32it/s]PermutationExplainer explainer:  91%|#########1| 91/100 [00:10<00:00,  9.14it/s]PermutationExplainer explainer:  92%|#########2| 92/100 [00:10<00:00,  8.86it/s]PermutationExplainer explainer:  93%|#########3| 93/100 [00:10<00:00,  8.75it/s]PermutationExplainer explainer:  94%|#########3| 94/100 [00:11<00:00,  8.62it/s]PermutationExplainer explainer:  95%|#########5| 95/100 [00:11<00:00,  8.54it/s]PermutationExplainer explainer:  96%|#########6| 96/100 [00:11<00:00,  8.60it/s]PermutationExplainer explainer:  97%|#########7| 97/100 [00:11<00:00,  8.55it/s]PermutationExplainer explainer:  98%|#########8| 98/100 [00:11<00:00,  8.41it/s]PermutationExplainer explainer:  99%|#########9| 99/100 [00:11<00:00,  8.48it/s]PermutationExplainer explainer: 100%|##########| 100/100 [00:11<00:00,  8.56it/s]PermutationExplainer explainer: 101it [00:11,  8.54it/s]                         PermutationExplainer explainer: 101it [00:11,  1.35it/s]
+
+Resultados no conjunto de teste:
+    rmse      mae       r2  mape_percent_nonzero  mape_excluded_zeros  rmse_patient_sd  mae_patient_sd  mape_percent_nonzero_patient_sd  metric_patient_count             model    cv_r2  fit_seconds
+2.580470 0.971993 0.873675              4.818045                    0         1.216657        0.583446                         3.317514                    10     random_forest 0.861625    11.191695
+2.386724 1.088862 0.891932              5.740452                    0         1.158914        0.617290                         4.069930                    10 gradient_boosting 0.859721     6.431716
+3.039321 1.907123 0.824755              9.323472                    0         1.261598        0.669132                         5.178578                    10          adaboost 0.815408     6.956596
+
+Gerando análise temporal por paciente...
+            model classification   id  observations     rmse      mae      bias  time_min  time_max
+    random_forest           best 14.0          20.0 0.622756 0.379172 -0.051825     146.0    5836.0
+    random_forest          worst 42.0          21.0 4.615842 1.812977  1.214392     841.5    4372.0
+gradient_boosting           best 18.0          26.0 0.706855 0.431867  0.139563     122.0    4348.0
+gradient_boosting          worst 42.0          21.0 4.227375 2.135564  1.750480     841.5    4372.0
+         adaboost           best 14.0          20.0 0.926234 0.804468  0.515682     146.0    5836.0
+         adaboost          worst 42.0          21.0 4.858936 2.803318  1.788146     841.5    4372.0
+
+Análise salva em: /home/thiago.esterci/Repositories/immuno_supression/studies/ml/study_20261124T191415Z_aGlLCS/20261124T191421_226831Z_random_all_vars-time-series_measurement-history_folds5_seed42/patient_temporal_analysis

@@ -1,0 +1,45 @@
+============================================================
+INICIANDO PREPARAÇÃO DOS DADOS
+============================================================
+
+[1/5] Lendo bases de dados...
+  lr_input carregado: 1525 linhas | 58 pacientes
+  MPA carregado: 1527 linhas | 56 pacientes
+  Tacrolimus carregado: 1596 linhas | 58 pacientes
+
+[2/5] Realizando merge das bases...
+  Associando dados de Tacrolimus...
+  Associando dados de MPA...
+  Merge concluído: 0 linhas x 27 colunas
+
+[3/5] Tratando flags e valores ausentes...
+  NaNs em dv_tac antes: 0
+  NaNs em dv_map antes: 0
+  Propagando dados não temporais dentro de cada paciente...
+Traceback (most recent call last):
+  File "/home/thiago.esterci/Repositories/immuno_supression/data_preparation.py", line 586, in <module>
+    main()
+  File "/home/thiago.esterci/Repositories/immuno_supression/data_preparation.py", line 542, in main
+    final_df = translating_flags(merged_df)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/thiago.esterci/Repositories/immuno_supression/data_preparation.py", line 267, in translating_flags
+    merged_df = propagate_non_temporal_columns(merged_df)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/thiago.esterci/Repositories/immuno_supression/data_preparation.py", line 48, in propagate_non_temporal_columns
+    df[columns] = df.groupby("id", dropna=False)[columns].transform(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/thiago.esterci/.conda/envs/transplant_ml/lib/python3.11/site-packages/pandas/core/groupby/generic.py", line 2792, in transform
+    return self._transform(
+           ^^^^^^^^^^^^^^^^
+  File "/home/thiago.esterci/.conda/envs/transplant_ml/lib/python3.11/site-packages/pandas/core/groupby/groupby.py", line 1823, in _transform
+    return self._transform_general(func, engine, engine_kwargs, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/thiago.esterci/.conda/envs/transplant_ml/lib/python3.11/site-packages/pandas/core/groupby/generic.py", line 2588, in _transform_general
+    concatenated = concat(
+                   ^^^^^^^
+  File "/home/thiago.esterci/.conda/envs/transplant_ml/lib/python3.11/site-packages/pandas/core/reshape/concat.py", line 407, in concat
+    objs, keys, ndims = _clean_keys_and_objs(objs, keys)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/thiago.esterci/.conda/envs/transplant_ml/lib/python3.11/site-packages/pandas/core/reshape/concat.py", line 808, in _clean_keys_and_objs
+    raise ValueError("No objects to concatenate")
+ValueError: No objects to concatenate

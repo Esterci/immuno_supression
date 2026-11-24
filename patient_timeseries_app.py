@@ -83,8 +83,7 @@ PATIENT_IDS = sorted(
 EXPERIMENTS = {
     str(path.parent.relative_to(ROOT)): path.parent
     for path in sorted((ROOT / "studies" / "ml").glob("**/metadata.json"))
-    if (path.parent / "test_target_series.csv").exists()
-    and any(path.parent.glob("*/predictions.csv"))
+    if any(path.parent.glob("*/predictions.csv"))
 }
 DEFAULT_EXPERIMENT = next(reversed(EXPERIMENTS), None)
 
@@ -148,30 +147,205 @@ def format_study_date(value: str | None) -> str:
         return value
 
 
-def study_description(study_key: str | None):
-    """Create a short description of a selected ML experiment."""
+def experiment_summary(study_key: str | None) -> dict | None:
+    """Load a compact, backwards-compatible summary of an ML experiment."""
     if not study_key or study_key not in EXPERIMENTS:
-        return "Nenhum experimento de ML compatível foi encontrado."
+        return None
     metadata_path = EXPERIMENTS[study_key] / "metadata.json"
     if not metadata_path.exists():
-        return "Metadados não disponíveis para este estudo."
+        return None
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     config = metadata.get("config") or {}
-    started = format_study_date(metadata.get("started_at_utc"))
-    details = [f"Data: {started}"]
+    preparation = metadata.get("data_preparation") or {}
 
-    details.extend(
+    occasions = preparation.get("occasions")
+    interpolation_applied = preparation.get("interpolation_applied")
+    archived_preparation = EXPERIMENTS[study_key] / "data_preparation_metadata.json"
+    if archived_preparation.exists() and (
+        occasions is None or interpolation_applied is None
+    ):
+        details = json.loads(archived_preparation.read_text(encoding="utf-8"))
+        selection = details.get("selecao_occ") or {}
+        interpolation = details.get("interpolacao") or {}
+        if occasions is None:
+            occasions = selection.get("ocasioes_mantidas")
+        if interpolation_applied is None:
+            interpolation_applied = interpolation.get("aplicada")
+
+    use_lym = config.get("use_lym")
+    if use_lym is None:
+        features = metadata.get("features") or []
+        use_lym = any(
+            feature in {"initial_lym", "d_time_lym", "val_lym", "tend_lym"}
+            for feature in features
+        )
+
+    models = metadata.get("models") or {}
+    model_names = list(models) if isinstance(models, dict) else models
+    return {
+        "name": Path(study_key).name,
+        "date": format_study_date(metadata.get("started_at_utc")),
+        "folds": config.get("folds"),
+        "search": config.get("search"),
+        "normalization": config.get("normalization"),
+        "variable_mode": config.get("var_mode"),
+        "occasions": occasions or [],
+        "use_lym": bool(use_lym),
+        "interpolation_applied": (
+            None if interpolation_applied is None else bool(interpolation_applied)
+        ),
+        "models": model_names,
+    }
+
+
+def study_description(study_key: str | None) -> html.Div:
+    """Render experiment metadata as a visual panel instead of prose."""
+    summary = experiment_summary(study_key)
+    if summary is None:
+        return html.Div("Nenhum experimento de ML compatível foi encontrado.")
+
+    occasions = ", ".join(str(value) for value in summary["occasions"]) or "N/D"
+    models = ", ".join(
+        str(model).replace("_", " ").title() for model in summary["models"]
+    ) or "N/D"
+    items = [
+        ("Data", summary["date"]),
+        ("Ocorrências", occasions),
+        ("Histórico de LYM", "Sim" if summary["use_lym"] else "Não"),
+        ("Variáveis", summary["variable_mode"] or "N/D"),
+        ("Validação", f"{summary['folds']} folds" if summary["folds"] else "N/D"),
+        ("Busca", summary["search"] or "N/D"),
+        ("Normalização", summary["normalization"] or "N/D"),
+        (
+            "Interpolação prévia",
+            (
+                "N/D"
+                if summary["interpolation_applied"] is None
+                else "Sim" if summary["interpolation_applied"] else "Não"
+            ),
+        ),
+        ("Modelos", models),
+    ]
+
+    cards = [
+        html.Div(
+            [
+                html.Div(label, style={"fontSize": "0.76rem", "color": "#64748b"}),
+                html.Div(
+                    value,
+                    style={"fontWeight": 650, "marginTop": "3px", "color": "#0f172a"},
+                ),
+            ],
+            style={
+                "backgroundColor": "#f8fafc",
+                "border": "1px solid #e2e8f0",
+                "borderRadius": "9px",
+                "padding": "9px 11px",
+            },
+        )
+        for label, value in items
+    ]
+    return html.Div(
         [
-            f"folds: {config.get('folds', 'não informado')}",
-            f"busca: {config.get('search', 'não informada')}",
-            f"normalização: {config.get('normalization', 'não informada')}",
-            "modelos: " + ", ".join(metadata.get("models") or ["não informados"]),
+            html.H3(summary["name"], style={"margin": "2px 0 10px"}),
+            html.Div(
+                cards,
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "repeat(auto-fit, minmax(150px, 1fr))",
+                    "gap": "8px",
+                },
+            ),
         ]
     )
-    return [
-        html.Strong(f"{Path(study_key).name}. "),
-        html.Span("; ".join(details) + "."),
-    ]
+
+
+@lru_cache(maxsize=None)
+def experiment_test_patients(study_key: str | None) -> pd.DataFrame:
+    """Return test patient IDs and evaluated row counts for one experiment."""
+    columns = ["id", "measurements"]
+    if not study_key or study_key not in EXPERIMENTS:
+        return pd.DataFrame(columns=columns)
+
+    experiment = EXPERIMENTS[study_key]
+    split_path = experiment / "splits.csv"
+    if split_path.exists():
+        splits = pd.read_csv(split_path)
+        if {"id", "split"}.issubset(splits.columns):
+            test = splits.loc[splits["split"].astype(str).str.lower().eq("test")]
+            if not test.empty:
+                result = (
+                    test.groupby("id", as_index=False)
+                    .size()
+                    .rename(columns={"size": "measurements"})
+                )
+                result["id"] = pd.to_numeric(result["id"], errors="coerce")
+                return result.dropna(subset=["id"]).sort_values("id").reset_index(
+                    drop=True
+                )
+
+    # Compatibility with archived studies that predate splits.csv.
+    prediction_frames = []
+    for prediction_path in experiment.glob("*/predictions.csv"):
+        predictions = pd.read_csv(prediction_path, usecols=lambda name: name == "id")
+        if "id" in predictions:
+            prediction_frames.append(predictions[["id"]])
+    if not prediction_frames:
+        return pd.DataFrame(columns=columns)
+    predictions = pd.concat(prediction_frames, ignore_index=True).drop_duplicates()
+    predictions["id"] = pd.to_numeric(predictions["id"], errors="coerce")
+    result = predictions.dropna(subset=["id"]).sort_values("id").reset_index(drop=True)
+    result["measurements"] = pd.NA
+    return result[columns]
+
+
+def test_patients_panel(study_key: str | None) -> html.Div:
+    """Render the patients that compose the selected experiment test set."""
+    patients = experiment_test_patients(study_key)
+    if patients.empty:
+        return html.Div(
+            [
+                html.Strong("Pacientes do conjunto de teste"),
+                html.P(
+                    "Não foi possível identificar pacientes de teste neste experimento.",
+                    style={"margin": "8px 0 0", "color": "#64748b"},
+                ),
+            ]
+        )
+
+    badges = []
+    for row in patients.itertuples(index=False):
+        patient_id = int(row.id) if float(row.id).is_integer() else row.id
+        count = (
+            f" · {int(row.measurements)} medidas"
+            if pd.notna(row.measurements)
+            else ""
+        )
+        badges.append(
+            html.Span(
+                f"Paciente {patient_id}{count}",
+                style={
+                    "display": "inline-block",
+                    "backgroundColor": "#e0f2fe",
+                    "border": "1px solid #7dd3fc",
+                    "borderRadius": "999px",
+                    "color": "#075985",
+                    "fontSize": "0.86rem",
+                    "fontWeight": 600,
+                    "margin": "5px 7px 0 0",
+                    "padding": "5px 10px",
+                },
+            )
+        )
+    return html.Div(
+        [
+            html.Strong(
+                f"Pacientes do conjunto de teste ({len(patients)})",
+                style={"display": "block"},
+            ),
+            html.Div(badges, style={"marginTop": "3px"}),
+        ]
+    )
 
 
 def binary_patient_status(patient_id: int, column: str) -> str:
@@ -892,6 +1066,16 @@ app.layout = html.Main(
             },
         ),
         html.Div(
+            id="test-patients-panel",
+            children=test_patients_panel(DEFAULT_EXPERIMENT),
+            style={
+                **CARD_STYLE,
+                "marginTop": "12px",
+                "lineHeight": "1.4",
+                "color": "#334155",
+            },
+        ),
+        html.Div(
             dcc.Graph(id="experiment-lym-graph"),
             style={**CARD_STYLE, "marginTop": "14px"},
         ),
@@ -935,6 +1119,13 @@ def update_population_count_histogram(series_key: str, occasion: int):
 @app.callback(Output("study-description", "children"), Input("study-select", "value"))
 def update_study_description(study_key: str):
     return study_description(study_key)
+
+
+@app.callback(
+    Output("test-patients-panel", "children"), Input("study-select", "value")
+)
+def update_test_patients_panel(study_key: str | None):
+    return test_patients_panel(study_key)
 
 
 @app.callback(

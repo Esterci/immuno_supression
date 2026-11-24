@@ -1,5 +1,0 @@
-{
-  "model__regressor__n_estimators": 200,
-  "model__regressor__loss": "exponential",
-  "model__regressor__learning_rate": 1.0
-}
