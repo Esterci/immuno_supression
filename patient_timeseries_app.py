@@ -23,7 +23,12 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import Dash, Input, Output, dcc, html
 
-from data_preparation import merge_db, normalizar_colunas, translating_flags
+from data_preparation import (
+    INTERPOLATION_FLAG_PREFIX,
+    merge_db,
+    normalizar_colunas,
+    translating_flags,
+)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -607,13 +612,32 @@ def processed_patient_series(
     patient = frame.loc[frame["id"] == patient_id].copy()
 
     def make_series(column: str, *, positive: bool = False, exponentiate: bool = False):
-        selected = patient.loc[patient[column].notna(), ["time", column]].copy()
+        flag_column = f"{INTERPOLATION_FLAG_PREFIX}{column}"
+        selected_columns = ["time", column]
+        if flag_column in patient.columns:
+            selected_columns.append(flag_column)
+        selected = patient.loc[
+            patient[column].notna(), selected_columns
+        ].copy()
         if positive:
             selected = selected.loc[selected[column] > 0]
         selected["VALUE"] = (
             np.exp(selected[column]) if exponentiate else selected[column]
         )
-        return selected.rename(columns={"time": "TIME"})[["TIME", "VALUE"]]
+        selected["INTERPOLATED"] = (
+            selected[flag_column].fillna(0).astype(bool)
+            if flag_column in selected
+            else False
+        )
+        selected["INTERPOLATION_FLAG_AVAILABLE"] = flag_column in selected
+        return selected.rename(columns={"time": "TIME"})[
+            [
+                "TIME",
+                "VALUE",
+                "INTERPOLATED",
+                "INTERPOLATION_FLAG_AVAILABLE",
+            ]
+        ]
 
     return {
         "tac_concentration": make_series("dv_tac", exponentiate=True),
@@ -641,31 +665,46 @@ def series_by_stage(
         series_key
     ].copy()
 
-    def mark_added(frame: pd.DataFrame, previous: pd.DataFrame) -> pd.DataFrame:
+    def mark_added(
+        frame: pd.DataFrame, previous: pd.DataFrame, *, use_interpolation_flag=False
+    ) -> pd.DataFrame:
         frame = frame.copy()
-        previous_times = set(previous["TIME"].round(6))
-        frame["ADDED"] = ~frame["TIME"].round(6).isin(previous_times)
+        flag_available = (
+            "INTERPOLATION_FLAG_AVAILABLE" in frame
+            and frame["INTERPOLATION_FLAG_AVAILABLE"].any()
+        )
+        if use_interpolation_flag and flag_available:
+            frame["ADDED"] = frame["INTERPOLATED"].fillna(False).astype(bool)
+        else:
+            previous_times = set(previous["TIME"].round(6))
+            frame["ADDED"] = ~frame["TIME"].round(6).isin(previous_times)
         return frame
 
     original["ADDED"] = False
+    original["INTERPOLATED"] = False
+    original["INTERPOLATION_FLAG_AVAILABLE"] = False
     return {
         "original": original,
         "merged": mark_added(after_merge, original),
-        "interpolated": mark_added(after_interpolation, after_merge),
+        "interpolated": mark_added(
+            after_interpolation, after_merge, use_interpolation_flag=True
+        ),
     }
 
 
 def original_figure(
     patient_id: int,
-    occasion: int | None,
     selected_series: list[str] | None,
     plot_type: str,
 ) -> go.Figure:
-    frames = original_patient_series(patient_id, occasion)
+    # A visão longitudinal original sempre mostra todo o acompanhamento. A
+    # ocorrência selecionada é usada apenas no histograma populacional.
+    frames = original_patient_series(patient_id, None)
+    processed_frames = processed_patient_series(
+        DATA["interpolated"], patient_id
+    )
     selected_series = selected_series or []
     title = "Séries temporais originais"
-    if occasion is not None:
-        title += f" — ocorrência {int(occasion)}"
     if not selected_series:
         return empty_figure(title, "Selecione uma série")
 
@@ -685,18 +724,51 @@ def original_figure(
     }
     figure = go.Figure()
     for series_key in selected_series:
-        if series_key not in frames or frames[series_key].empty:
+        if series_key not in frames:
             continue
         frame = frames[series_key]
+        if not frame.empty:
+            figure.add_trace(
+                go.Scatter(
+                    x=frame["TIME"],
+                    y=frame["VALUE"],
+                    mode=(
+                        "markers" if plot_type == "scatter" else "lines+markers"
+                    ),
+                    name=f"{SERIES[series_key]} — observado",
+                    marker={
+                        "size": 8,
+                        "color": colors[series_key],
+                        "opacity": 0.82,
+                    },
+                    hovertemplate=(
+                        f"{SERIES[series_key]} — observado"
+                        "<br>Tempo: %{x:.2f} h"
+                        "<br>Valor: %{y:.4g}<extra></extra>"
+                    ),
+                )
+            )
+        processed = processed_frames.get(series_key, pd.DataFrame())
+        if "INTERPOLATED" not in processed:
+            continue
+        interpolated = processed.loc[processed["INTERPOLATED"]]
+        if interpolated.empty:
+            continue
         figure.add_trace(
             go.Scatter(
-                x=frame["TIME"],
-                y=frame["VALUE"],
-                mode="markers" if plot_type == "scatter" else "lines+markers",
-                name=SERIES[series_key],
-                marker={"size": 8, "color": colors[series_key], "opacity": 0.82},
+                x=interpolated["TIME"],
+                y=interpolated["VALUE"],
+                mode="markers",
+                name=f"{SERIES[series_key]} — interpolado",
+                marker={
+                    "size": 11,
+                    "color": colors[series_key],
+                    "symbol": "x",
+                    "line": {"color": "#0f172a", "width": 1},
+                },
                 hovertemplate=(
-                    f"{SERIES[series_key]}<br>Tempo: %{{x:.2f}} h"
+                    f"{SERIES[series_key]} — interpolado"
+                    "<br>Tempo: %{x:.2f} h"
                     "<br>Valor: %{y:.4g}<extra></extra>"
                 ),
             )
@@ -780,8 +852,36 @@ def experiment_lym_figure(
     metadata = json.loads(
         (experiment / "metadata.json").read_text(encoding="utf-8")
     )
+    target_series_path = experiment / "test_target_series.csv"
+    if target_series_path.exists():
+        target_series = pd.read_csv(target_series_path)
+        if "interpolated" in target_series.columns:
+            interpolated_targets = target_series.loc[
+                target_series["id"].eq(patient_id)
+                & target_series["interpolated"].fillna(False).astype(bool)
+            ].sort_values("time")
+            if not interpolated_targets.empty:
+                figure.add_trace(
+                    go.Scatter(
+                        x=interpolated_targets["time"],
+                        y=interpolated_targets["lym"],
+                        mode="markers",
+                        name="LYM interpolado (somente histórico)",
+                        marker={
+                            "size": 11,
+                            "symbol": "x",
+                            "color": "#dc2626",
+                        },
+                        hovertemplate=(
+                            "LYM interpolado — não usado como alvo"
+                            "<br>Tempo: %{x:.2f} h"
+                            "<br>Valor: %{y:.4g}<extra></extra>"
+                        ),
+                    )
+                )
     colors = ["#dc2626", "#059669", "#7c3aed", "#d97706"]
     prediction_count = 0
+    interpolated_targets_added = False
     for color, model in zip(colors, metadata.get("models") or []):
         prediction_path = experiment / model / "predictions.csv"
         if not prediction_path.exists():
@@ -791,21 +891,54 @@ def experiment_lym_figure(
         if patient.empty:
             continue
         prediction_count += len(patient)
-        figure.add_trace(
-            go.Scatter(
-                x=patient["time"],
-                y=patient["predicted"],
-                mode="markers" if plot_type == "scatter" else "lines+markers",
-                name=f"LYM previsto — {model.replace('_', ' ').title()}",
-                marker={"size": 10, "symbol": "diamond", "color": color},
-                line={"color": color, "width": 2, "dash": "dash"},
-                hovertemplate=(
-                    f"{model.replace('_', ' ').title()}"
-                    "<br>Tempo: %{x:.2f} h"
-                    "<br>LYM previsto: %{y:.4g}<extra></extra>"
-                ),
-            )
+        interpolation_status = (
+            patient["interpolated"].fillna(False).astype(bool)
+            if "interpolated" in patient
+            else pd.Series(False, index=patient.index)
         )
+        if interpolation_status.any() and not interpolated_targets_added:
+            targets = patient.loc[interpolation_status]
+            figure.add_trace(
+                go.Scatter(
+                    x=targets["time"],
+                    y=targets["observed"],
+                    mode="markers",
+                    name="LYM interpolado usado como alvo",
+                    marker={"size": 11, "symbol": "x", "color": "#dc2626"},
+                    hovertemplate=(
+                        "LYM interpolado<br>Tempo: %{x:.2f} h"
+                        "<br>Valor: %{y:.4g}<extra></extra>"
+                    ),
+                )
+            )
+            interpolated_targets_added = True
+        for is_interpolated, suffix, symbol in (
+            (False, "alvo original", "diamond"),
+            (True, "alvo interpolado", "x"),
+        ):
+            selected = patient.loc[interpolation_status.eq(is_interpolated)]
+            if selected.empty:
+                continue
+            figure.add_trace(
+                go.Scatter(
+                    x=selected["time"],
+                    y=selected["predicted"],
+                    mode=(
+                        "markers" if plot_type == "scatter" else "lines+markers"
+                    ),
+                    name=(
+                        f"LYM previsto — {model.replace('_', ' ').title()} "
+                        f"({suffix})"
+                    ),
+                    marker={"size": 10, "symbol": symbol, "color": color},
+                    line={"color": color, "width": 2, "dash": "dash"},
+                    hovertemplate=(
+                        f"{model.replace('_', ' ').title()} — {suffix}"
+                        "<br>Tempo: %{x:.2f} h"
+                        "<br>LYM previsto: %{y:.4g}<extra></extra>"
+                    ),
+                )
+            )
 
     if not figure.data:
         return empty_figure("LYM original e previsto")
@@ -850,7 +983,9 @@ def series_figure(
         if frame.empty:
             continue
         point_status = np.where(
-            frame["ADDED"], "Adicionado nesta etapa", "Já existente na etapa anterior"
+            frame["ADDED"],
+            "Interpolado" if stage == "interpolated" else "Adicionado nesta etapa",
+            "Observado/não interpolado",
         )
         figure.add_trace(
             go.Scatter(
@@ -878,7 +1013,11 @@ def series_figure(
                     x=added["TIME"],
                     y=added["VALUE"],
                     mode="markers",
-                    name=f"{STAGES[stage]} — pontos adicionados",
+                    name=(
+                        f"{STAGES[stage]} — pontos interpolados"
+                        if stage == "interpolated"
+                        else f"{STAGES[stage]} — pontos adicionados"
+                    ),
                     marker={
                         "size": 8,
                         "color": colors[stage],
@@ -886,7 +1025,8 @@ def series_figure(
                         "line": {"color": "#0f172a", "width": 1.5},
                     },
                     hovertemplate=(
-                        f"{STAGES[stage]} — adicionado"
+                        f"{STAGES[stage]} — "
+                        f"{'interpolado' if stage == 'interpolated' else 'adicionado'}"
                         "<br>Tempo: %{x:.2f} h"
                         "<br>Valor: %{y:.4g}<extra></extra>"
                     ),
@@ -947,7 +1087,8 @@ app.layout = html.Main(
     [
         html.H1("Séries temporais originais", style={"marginBottom": "4px"}),
         html.P(
-            "Visualização conjunta das medidas originais, sem merge ou interpolação.",
+            "Visualização longitudinal completa das medidas originais, com os "
+            "pontos interpolados destacados e sem filtro por ocorrência.",
             style={"color": "#475569", "marginTop": 0},
         ),
         html.H2("Visão geral de todos os pacientes", style={"marginBottom": "4px"}),
@@ -1094,17 +1235,15 @@ app.layout = html.Main(
 @app.callback(
     Output("original-timeseries-graph", "figure"),
     Input("patient-select", "value"),
-    Input("occasion-select", "value"),
     Input("original-series-select", "value"),
     Input("plot-type", "value"),
 )
 def update_original_graph(
     patient_id: int,
-    occasion: int,
     selected_series: list[str] | None,
     plot_type: str,
 ):
-    return original_figure(int(patient_id), occasion, selected_series, plot_type)
+    return original_figure(int(patient_id), selected_series, plot_type)
 
 
 @app.callback(

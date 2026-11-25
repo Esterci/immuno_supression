@@ -9,6 +9,22 @@ Por padrao, cada serie recebe MinMax ajustado nos exames de treino do paciente.
 python -m runners.run_interpolation_study
 ```
 
+Para executar pelo shell simplificado:
+
+```bash
+bash shells/run_interpolation_study.sh
+```
+
+Escolha uma ou várias ocasiões pela variável `OCC`, como no estudo de ML:
+
+```bash
+OCC=1 bash shells/run_interpolation_study.sh
+OCC="1 2 3" bash shells/run_interpolation_study.sh
+```
+
+Também podem ser configurados `STUDY_NAME`, `OUTPUT_DIR`, `MIN_OBSERVATIONS`,
+`NORMALIZATION` e `PYTHON_BIN` por variáveis de ambiente.
+
 Por paciente e serie, cada exame interno observado e removido uma vez. O valor e
 estimado pelos demais exames do mesmo paciente. O primeiro e o ultimo exame nao
 sao avaliados, pois sua remocao exigiria extrapolacao. Pacientes precisam ter ao
@@ -32,16 +48,30 @@ Arquivos produzidos:
 
 - `exam_predictions.parquet`: valor observado, predito e erros de cada LOOCV;
 - `patient_metrics.csv`: metricas por paciente, serie e metodo;
-- `macro_metrics.csv`: comparacao principal com peso igual por paciente;
+- `macro_metrics.csv`: comparação principal com RMSE, MAE, MAPE e respectivos
+  desvios padrão entre pacientes;
 - `best_methods.csv`: menor RMSE macro por serie;
 - `eligibility.csv`: pacientes e exames elegiveis;
+- `series_catalog.csv`: classificação de todas as séries temporais, incluindo
+  exclusões semânticas e suas justificativas;
 - `metadata.json`: protocolo, hashes dos dados e versoes;
-- `rmse_comparison.png` e `README.md`: resumo visual e legivel.
+- `plots/<serie>_metrics.png`: um gráfico por série com RMSE, MAE e MAPE,
+  incluindo barras de erro de um desvio padrão entre pacientes;
+- `README.md`: resumo visual e legível, com média e desvio padrão.
 
-As series padrao sao `m155`, `wgt`, `gf`, `lym`, `dv_tac` e `dv_map`. Indicadores
-binarios (`dm`, infeccoes), doses prescritas e variaveis estaticas sao excluidos,
-pois interpoladores continuos nao respeitam sua semantica. Outra selecao pode ser
+O MAPE é calculado na escala original da variável. Valores observados iguais a
+zero são excluídos apenas do MAPE e suas contagens são registradas nas tabelas.
+
+Por padrão, as séries contínuas são descobertas a partir da classificação atual
+do pipeline. Atualmente são `m155`, `wgt`, `gf`, `lym`, `dv_tac` e `dv_map`.
+`tad` e `gfc` são removidas durante a preparação e não chegam ao estudo. As
+colunas `amt_*` são catalogadas, mas excluídas dos interpoladores porque
+representam eventos de dose. Variáveis estáticas também são excluídas. A
+auditoria completa fica em `series_catalog.csv`. Outra seleção pode ser
 executada explicitamente com `--series`.
+
+O estudo usa `OCC=1`, como o pipeline principal. Use `--occ` para avaliar outras
+ocasiões explicitamente.
 
 Para `m155`, somente valores estritamente positivos contam como exames: `0` e
 uma linha estrutural sem medida no conjunto original, e `9999` e traduzido para

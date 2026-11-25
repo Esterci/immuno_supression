@@ -15,7 +15,11 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupKFold, GroupShuffleSplit, ParameterGrid
-from data_preparation import NON_TEMPORAL_COLUMNS
+from data_preparation import (
+    EXCLUDED_VARIABLE_COLUMNS,
+    INTERPOLATION_FLAG_PREFIX,
+    NON_TEMPORAL_COLUMNS,
+)
 from methods.ml_models import model_specs, make_search
 from utils.ml_reports import (
     write_json,
@@ -50,22 +54,39 @@ def prepare_measurement_features(data, target="lym", var_mode="all", use_lym=Tru
 
     static_columns = available_static_columns if var_mode == "all" else []
 
-    excluded_temporal_columns = {*available_static_columns, "id", "time"}
+    # Classifica as séries a partir das colunas disponíveis, preservando a ordem
+    # original. Flags de interpolação são metadados, nunca preditores.
+    temporal_column_set = (
+        set(data.columns)
+        - set(NON_TEMPORAL_COLUMNS)
+        - set(EXCLUDED_VARIABLE_COLUMNS)
+        - {"id", "time"}
+    )
     if not use_lym:
-        excluded_temporal_columns.add(target)
+        temporal_column_set.discard(target)
     temporal_columns = [
-        column for column in data.columns if column not in excluded_temporal_columns
+        column
+        for column in data.columns
+        if column in temporal_column_set
+        and not column.startswith(INTERPOLATION_FLAG_PREFIX)
     ]
 
+    target_flag = f"{INTERPOLATION_FLAG_PREFIX}{target}"
     target_rows = data[target].notna()
+    if target_flag in data.columns:
+        # Valores interpolados participam do histórico dos preditores, mas
+        # nunca são tratados como verdade de referência supervisionada.
+        target_rows &= ~data[target_flag].fillna(0).astype(bool)
     supervised = data.loc[target_rows]
     if supervised.empty:
-        raise ValueError(f"Nenhuma medida observada de {target}")
+        raise ValueError(f"Nenhuma medida real observada de {target}")
 
     # ID identifica os grupos, mas não é oferecido ao modelo. O tempo é feature.
     X = supervised[["time", *static_columns]].copy()
     y = pd.to_numeric(supervised[target], errors="coerce").copy()
     rows = supervised[["id", "time"]].copy()
+    if target_flag in supervised.columns:
+        rows["interpolated"] = supervised[target_flag].fillna(0).astype(bool)
     generated_columns = []
 
     for predictor in temporal_columns:
@@ -208,12 +229,7 @@ def parse_args(argv=None):
     args.models = list(dict.fromkeys(args.models))
     args.use_lym = bool(args.use_lym)
     if args.data is None:
-        filename = (
-            "full_processed.parquet"
-            if args.var_mode == "time-series"
-            else "clean_processed.parquet"
-        )
-        args.data = BASE / "data" / filename
+        args.data = BASE / "data" / "clean_processed.parquet"
     return args
 
 
@@ -221,6 +237,10 @@ def execute(args, output, metadata):
     import shap  # Falha antes de treinar se a dependência estiver ausente.
 
     data = pd.read_parquet(args.data)
+    real_target_rows = data["lym"].notna()
+    target_flag = f"{INTERPOLATION_FLAG_PREFIX}lym"
+    if target_flag in data.columns:
+        real_target_rows &= ~data[target_flag].fillna(0).astype(bool)
     X, y, rows = prepare_measurement_features(
         data, target="lym", var_mode=args.var_mode, use_lym=args.use_lym
     )
@@ -264,10 +284,19 @@ def execute(args, output, metadata):
         splits.loc[X_train.iloc[validation].index, "validation_fold"] = fold
     splits.to_csv(output / "splits.csv", index_label="row")
     test_patient_ids = rows.iloc[test]["id"].unique()
+    target_series_columns = ["id", "time", "lym"]
+    target_flag = f"{INTERPOLATION_FLAG_PREFIX}lym"
+    if target_flag in data.columns:
+        target_series_columns.append(target_flag)
     test_target_series = data.loc[
         data["id"].isin(test_patient_ids) & data["lym"].notna(),
-        ["id", "time", "lym"],
+        target_series_columns,
     ].sort_values(["id", "time"], kind="stable")
+    test_target_series["interpolated"] = (
+        test_target_series.pop(target_flag).fillna(0).astype(bool)
+        if target_flag in test_target_series
+        else False
+    )
 
     test_target_series.to_csv(output / "test_target_series.csv", index=False)
 
@@ -277,10 +306,10 @@ def execute(args, output, metadata):
     metadata.update(
         input_sha256=hashlib.sha256(args.data.read_bytes()).hexdigest(),
         rows_before=len(data),
-        target_measurements_before_formatting=int(data["lym"].notna().sum()),
+        target_measurements_before_formatting=int(real_target_rows.sum()),
         rows_after_formatting=len(X),
         target_measurements_removed_without_history=int(
-            data["lym"].notna().sum() - len(X)
+            real_target_rows.sum() - len(X)
         ),
         missing_before=int(data.isna().sum().sum()),
         missing_features=int(X.isna().sum().sum()),
@@ -294,9 +323,10 @@ def execute(args, output, metadata):
             "mode": "measurement_history",
             "variable_mode": args.var_mode,
             "description": (
-                "Uma linha por medida de LYM; estáticas e tempo atual, mais "
+                "Uma linha por medida real de LYM; estáticas e tempo atual, mais "
                 "valor inicial, último valor, tempo desde o último valor e "
-                "tendência das séries temporais. O histórico anterior de LYM "
+                "tendência das séries temporais. Valores interpolados podem compor "
+                "o histórico dos atributos, mas nunca o alvo. O histórico de LYM "
                 f"{'é' if args.use_lym else 'não é'} usado como entrada."
             ),
             "feature_count": len(X.columns),
@@ -305,6 +335,8 @@ def execute(args, output, metadata):
             "target_history_scope": (
                 "strictly_previous_measurements" if args.use_lym else "excluded"
             ),
+            "interpolated_values_as_predictor_history": True,
+            "interpolated_target_rows_excluded": True,
         },
         protocol="GroupShuffleSplit para teste; GroupKFold apenas no treino; refit no treino completo",
         normalization={
@@ -380,7 +412,16 @@ def execute(args, output, metadata):
         predictions["predicted"] = prediction
         predictions.to_csv(folder / "predictions.csv", index_label="row")
         joblib.dump(search.best_estimator_, folder / "model.joblib")
-        prediction_plot(y_test, prediction, folder / "predictions.png")
+        prediction_plot(
+            y_test,
+            prediction,
+            folder / "predictions.png",
+            interpolated=(
+                rows.iloc[test]["interpolated"]
+                if "interpolated" in rows.columns
+                else None
+            ),
+        )
         print(
             f'  R² CV: {search.best_score_:.4f}; RMSE teste: {metrics["rmse"]:.4f}; calculando SHAP...'
         )

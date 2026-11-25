@@ -31,8 +31,16 @@ O MinMax de todas as features é ajustado somente nas linhas de treino de cada f
 `lym` também recebe MinMax durante o ajuste, e as previsões são automaticamente
 devolvidas à escala original. Métricas e plots incluem somente medidas previsíveis.
 
+Com `INTERPOLATION=1`, a preparação preenche somente lacunas internas às séries;
+as extremidades permanecem ausentes. Colunas `int_fg_*` identificam os valores
+interpolados nos Parquets e relatórios, mas são removidas antes do treinamento e
+não podem ser usadas como features. Os valores interpolados podem compor o
+histórico usado em `initial_*`, `val_*`, `d_time_*` e `tend_*`. Entretanto, uma
+linha só é usada como exemplo de treino ou teste quando o LYM naquele instante é
+uma medida real; `int_fg_lym = 1` nunca pode ser selecionado como alvo.
+
 O modo padrão `VARMODE=all` inclui as variáveis não temporais. Com
-`VARMODE=time-series`, o runner usa `full_processed.parquet` e oferece ao modelo
+`VARMODE=time-series`, o runner usa `clean_processed.parquet` e oferece ao modelo
 somente `time` e os atributos derivados das séries temporais. Ausências em
 variáveis não temporais, como `cisq`, não removem pacientes nesse modo. O shell
 repassa `VARMODE` à preparação para que o mesmo critério seja usado na criação
@@ -60,6 +68,9 @@ VARMODE=time-series bash shells/run_ml_experiments.sh
 # Regenerar os dados mantendo mais de uma ocasião antes do merge.
 OCC="1 2 3" PREPARE_DATA=1 bash shells/run_ml_experiments.sh
 
+# Preparar os dados com interpolação das lacunas internas.
+INTERPOLATION=1 PREPARE_DATA=1 bash shells/run_ml_experiments.sh
+
 # Validação rápida.
 PREPARE_DATA=0 FOLDS=2 N_ITER=1 N_JOBS=1 \
   bash shells/run_ml_experiments.sh --quick --shap-samples 4 --shap-background 5
@@ -70,7 +81,8 @@ python -m runners.run_ml_experiment \
   --test-size 0.2 --normalization all --shap-samples 100
 ```
 
-O shell aceita `OCC`, `VARMODE`, `USE_LYM` (`0` ou `1`), `SEARCHES`, `FOLDS`,
+O shell aceita `OCC`, `VARMODE`, `USE_LYM` (`0` ou `1`), `INTERPOLATION`
+(`0` ou `1`), `SEARCHES`, `FOLDS`,
 `SEEDS`, `N_ITER`, `N_JOBS`, `OUTPUT_DIR`,
 `PREPARE_DATA` e argumentos adicionais do runner. `--quick` usa uma grade pequena
 apenas para validar o fluxo.
@@ -93,6 +105,7 @@ Cada experimento registra:
 
 Os gráficos temporais exibem todos os pontos originais de `lym` dos pacientes de
 teste e sobrepõem as previsões somente nos tempos em que elas foram possíveis.
+Pontos observados originalmente e pontos interpolados usam marcadores distintos.
 
 O `model.joblib` contém normalização, transformação do alvo e o modelo.
 Para previsão, forneça as features no formato e na ordem registrados em

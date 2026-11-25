@@ -1,0 +1,9 @@
+series,interpolation_eligible,reason,observed_exams,observed_patients,observed_exams_per_patient_sd,unique_values
+m155,True,série temporal contínua,183,58,1.348185579108781,65
+wgt,True,série temporal contínua,1525,58,9.90836722557405,168
+gf,True,série temporal contínua,1524,58,9.902672160102334,219
+lym,True,série temporal contínua,1162,56,8.743309130155158,172
+amt_tac,False,"evento/dose prescrita, não uma medida contínua",1596,58,7.380014214103044,36
+dv_tac,True,série temporal contínua,1102,58,5.794734451933156,636
+amt_map,False,"evento/dose prescrita, não uma medida contínua",1527,56,8.134083334236974,11
+dv_map,True,série temporal contínua,1071,56,6.114253094948794,647

@@ -1,0 +1,349 @@
+{
+  "status": "complete",
+  "started_at_utc": "20261125T205252_773308Z",
+  "config": {
+    "data": "/home/thiago.esterci/Repositories/immuno_supression/data/clean_processed.parquet",
+    "output_dir": "/home/thiago.esterci/Repositories/immuno_supression/studies/ml/study_20261125T205249Z_dvJGlH",
+    "search": "random",
+    "folds": 5,
+    "n_iter": 30,
+    "seed": 42,
+    "n_jobs": 8,
+    "test_size": 0.2,
+    "normalization": "all",
+    "var_mode": "time-series",
+    "models": [
+      "random_forest",
+      "gradient_boosting",
+      "adaboost"
+    ],
+    "shap_samples": 100,
+    "shap_background": 50,
+    "shap_permutations": 5,
+    "quick": false,
+    "use_lym": false
+  },
+  "python": "3.11.16 (main, Sep  2 2026, 23:39:52) [GCC 15.3.0]",
+  "python_executable": "/home/thiago.esterci/.conda/envs/transplant_ml/bin/python",
+  "command": [
+    "/home/thiago.esterci/Repositories/immuno_supression/runners/run_ml_experiment.py",
+    "--search",
+    "random",
+    "--folds",
+    "5",
+    "--seed",
+    "42",
+    "--normalization",
+    "all",
+    "--var-mode",
+    "time-series",
+    "--n-iter",
+    "30",
+    "--n-jobs",
+    "8",
+    "--output-dir",
+    "studies/ml/study_20261125T205249Z_dvJGlH",
+    "--use-lym",
+    "0"
+  ],
+  "versions": {
+    "numpy": "2.4.6",
+    "pandas": "3.0.6",
+    "scikit-learn": "1.9.1",
+    "matplotlib": "3.11.2",
+    "shap": "0.51.0",
+    "pyarrow": "25.0.0",
+    "joblib": "1.6.0"
+  },
+  "source_sha256": {
+    "methods/ml_models.py": "44004c2d2135afa0f0fa05ae135e8ac3f53dc6476f7ec03191e25674ccf06154",
+    "utils/ml_reports.py": "d28e05cb407a2f3b4908facdd2247b3339c1343e993bedcbeb5dee6d2831db11",
+    "utils/analyze_patient_timeseries.py": "6d7448c1e3cacd0bcbc0ee1869d1287dff533fefb6fc6d557205246ddf1babf6",
+    "runners/run_ml_experiment.py": "ae75332e6a9d863c5ce267c5082f734013fbf562795c42ac17d455cc547fd906",
+    "shells/run_ml_experiments.sh": "72af9b95c2ef826a4d89cc45dfcfbbde7d4e9b598524f5f103cda5bccd65dd51",
+    "data_preparation.py": "fd2452189476382194342617d951f861a4bf61d4d531a5ac283772ee29f21318",
+    "transplant_ml.yml": "17aa8f45d8938dff153ab0f08ca00263cbf10ce3c1a2dbd47b1872e62079deba"
+  },
+  "patients_before": 54,
+  "patients_after_formatting": 50,
+  "patients_removed_during_formatting": 4,
+  "input_sha256": "71219ce238ba3e725fa760b8b71ef5ead0b85b85ac764509f53f22c3e241cfde",
+  "rows_before": 1810,
+  "target_measurements_before_formatting": 1135,
+  "rows_after_formatting": 1003,
+  "target_measurements_removed_without_history": 132,
+  "missing_before": 4639,
+  "missing_features": 0,
+  "train_rows": 806,
+  "test_rows": 197,
+  "train_patients": 40,
+  "test_patients": 10,
+  "features": [
+    "time",
+    "initial_m155",
+    "d_time_m155",
+    "val_m155",
+    "tend_m155",
+    "initial_wgt",
+    "d_time_wgt",
+    "val_wgt",
+    "tend_wgt",
+    "initial_gf",
+    "d_time_gf",
+    "val_gf",
+    "tend_gf",
+    "initial_amt_tac",
+    "d_time_amt_tac",
+    "val_amt_tac",
+    "tend_amt_tac",
+    "initial_dv_tac",
+    "d_time_dv_tac",
+    "val_dv_tac",
+    "tend_dv_tac",
+    "initial_amt_map",
+    "d_time_amt_map",
+    "val_amt_map",
+    "tend_amt_map",
+    "initial_dv_map",
+    "d_time_dv_map",
+    "val_dv_map",
+    "tend_dv_map"
+  ],
+  "target": "lym",
+  "feature_format": {
+    "mode": "measurement_history",
+    "variable_mode": "time-series",
+    "description": "Uma linha por medida real de LYM; estáticas e tempo atual, mais valor inicial, último valor, tempo desde o último valor e tendência das séries temporais. Valores interpolados podem compor o histórico dos atributos, mas nunca o alvo. O histórico de LYM não é usado como entrada.",
+    "feature_count": 29,
+    "uses_target_history": false,
+    "target_excluded_from_history": true,
+    "target_history_scope": "excluded",
+    "interpolated_values_as_predictor_history": true,
+    "interpolated_target_rows_excluded": true
+  },
+  "protocol": "GroupShuffleSplit para teste; GroupKFold apenas no treino; refit no treino completo",
+  "normalization": {
+    "mode": "all",
+    "description": "MinMax em todos os atributos e no alvo LYM. Os transformadores são ajustados somente no treino de cada fold.",
+    "target_scaled": true,
+    "predictions_inverse_transformed": true,
+    "identifiers_scaled": false,
+    "metadata": "ID e tempo usados nos relatórios permanecem na escala original."
+  },
+  "preprocessing_note": "Atributos históricos usam somente observações no mesmo paciente com time < ao time do alvo. Medidas de LYM com qualquer feature temporal ausente são excluídas. ID é usado apenas para agrupamento. Todas as features restantes são normalizadas somente com dados de treino em cada fold.",
+  "search_scoring": "r2",
+  "metrics_weighting": "Por observação, não por paciente",
+  "metrics_dispersion": "Desvio padrão amostral (ddof=1) de RMSE, MAE e MAPE calculados separadamente por paciente no conjunto de teste",
+  "models": {
+    "random_forest": {
+      "parameters": {
+        "n_estimators": [
+          100,
+          200,
+          300,
+          500,
+          800
+        ],
+        "max_depth": [
+          null,
+          5,
+          10,
+          20
+        ],
+        "min_samples_split": [
+          2,
+          5,
+          10
+        ],
+        "min_samples_leaf": [
+          1,
+          2,
+          4
+        ],
+        "max_features": [
+          "sqrt",
+          "log2",
+          0.5,
+          1.0
+        ]
+      },
+      "candidates": 30,
+      "best_params": {
+        "model__regressor__n_estimators": 800,
+        "model__regressor__min_samples_split": 2,
+        "model__regressor__min_samples_leaf": 4,
+        "model__regressor__max_features": "log2",
+        "model__regressor__max_depth": 5
+      },
+      "metrics": {
+        "rmse": 7.451968935508688,
+        "mae": 5.8557174034118304,
+        "r2": -0.06225602753615722,
+        "mape_percent_nonzero": 30.523209861145705,
+        "mape_excluded_zeros": 0,
+        "rmse_patient_sd": 3.6457569304742004,
+        "mae_patient_sd": 3.636682391424508,
+        "mape_percent_nonzero_patient_sd": 23.01423683860309,
+        "metric_patient_count": 10,
+        "model": "random_forest",
+        "cv_r2": -0.21576886154428876,
+        "fit_seconds": 10.794735374001903
+      },
+      "shap": {
+        "algorithm": "permutation_pipeline",
+        "fallback_reason": null,
+        "feature_scale": "prepared_features",
+        "target_scale": "original_lym",
+        "samples": 100,
+        "background_samples": 50,
+        "background_source": "train",
+        "explained_source": "test",
+        "seed": 42,
+        "permutations": 5
+      }
+    },
+    "gradient_boosting": {
+      "parameters": {
+        "n_estimators": [
+          50,
+          100,
+          200,
+          300
+        ],
+        "learning_rate": [
+          0.01,
+          0.03,
+          0.05,
+          0.1
+        ],
+        "max_depth": [
+          2,
+          3,
+          4,
+          5
+        ],
+        "min_samples_split": [
+          2,
+          5,
+          10
+        ],
+        "min_samples_leaf": [
+          1,
+          2,
+          4
+        ],
+        "subsample": [
+          0.7,
+          0.8,
+          1.0
+        ]
+      },
+      "candidates": 30,
+      "best_params": {
+        "model__regressor__subsample": 1.0,
+        "model__regressor__n_estimators": 50,
+        "model__regressor__min_samples_split": 2,
+        "model__regressor__min_samples_leaf": 2,
+        "model__regressor__max_depth": 4,
+        "model__regressor__learning_rate": 0.01
+      },
+      "metrics": {
+        "rmse": 7.7236678094593145,
+        "mae": 6.1634716696508285,
+        "r2": -0.14112785314686516,
+        "mape_percent_nonzero": 30.9703617230091,
+        "mape_excluded_zeros": 0,
+        "rmse_patient_sd": 3.517024475278844,
+        "mae_patient_sd": 3.6316017817510233,
+        "mape_percent_nonzero_patient_sd": 22.99032624476455,
+        "metric_patient_count": 10,
+        "model": "gradient_boosting",
+        "cv_r2": -0.17707561647946468,
+        "fit_seconds": 5.2689239459978126
+      },
+      "shap": {
+        "algorithm": "permutation_pipeline",
+        "fallback_reason": null,
+        "feature_scale": "prepared_features",
+        "target_scale": "original_lym",
+        "samples": 100,
+        "background_samples": 50,
+        "background_source": "train",
+        "explained_source": "test",
+        "seed": 42,
+        "permutations": 5
+      }
+    },
+    "adaboost": {
+      "parameters": {
+        "n_estimators": [
+          50,
+          100,
+          200,
+          300
+        ],
+        "learning_rate": [
+          0.01,
+          0.05,
+          0.1,
+          0.5,
+          1.0
+        ],
+        "loss": [
+          "linear",
+          "square",
+          "exponential"
+        ]
+      },
+      "candidates": 30,
+      "best_params": {
+        "model__regressor__n_estimators": 300,
+        "model__regressor__loss": "square",
+        "model__regressor__learning_rate": 0.5
+      },
+      "metrics": {
+        "rmse": 9.115246063051956,
+        "mae": 7.53380691702305,
+        "r2": -0.5893660283251043,
+        "mape_percent_nonzero": 37.75955756392788,
+        "mape_excluded_zeros": 0,
+        "rmse_patient_sd": 3.858357038515394,
+        "mae_patient_sd": 4.0035258813754115,
+        "mape_percent_nonzero_patient_sd": 27.687941059505548,
+        "metric_patient_count": 10,
+        "model": "adaboost",
+        "cv_r2": -0.18009299304357987,
+        "fit_seconds": 6.742599801000324
+      },
+      "shap": {
+        "algorithm": "permutation_pipeline",
+        "fallback_reason": null,
+        "feature_scale": "prepared_features",
+        "target_scale": "original_lym",
+        "samples": 100,
+        "background_samples": 50,
+        "background_source": "train",
+        "explained_source": "test",
+        "seed": 42,
+        "permutations": 5
+      }
+    }
+  },
+  "data_preparation": {
+    "occasions": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "interpolation_applied": false
+  },
+  "patient_temporal_analysis": {
+    "status": "complete",
+    "criterion": "RMSE por paciente no conjunto de teste",
+    "directory": "patient_temporal_analysis"
+  },
+  "elapsed_seconds": 87.83739522900214,
+  "finished_at_utc": "2026-11-25T20:54:20.653804+00:00"
+}

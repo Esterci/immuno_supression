@@ -1,5 +1,0 @@
-{
-  "model__regressor__n_estimators": 100,
-  "model__regressor__loss": "square",
-  "model__regressor__learning_rate": 0.01
-}

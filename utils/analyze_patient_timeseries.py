@@ -41,23 +41,53 @@ def temporal_plot(predictions, original_series, metrics, model, output):
         original = original_series[
             original_series["id"] == result["id"]
         ].sort_values("time")
+        original_interpolated = (
+            original["interpolated"].fillna(False).astype(bool)
+            if "interpolated" in original
+            else pd.Series(False, index=original.index)
+        )
+        measured = original.loc[~original_interpolated]
+        filled = original.loc[original_interpolated]
         axis.plot(
-            original["time"],
-            original["lym"],
+            measured["time"],
+            measured["lym"],
             "o-",
-            label="Série original de LYM",
+            label="LYM observado originalmente",
             linewidth=1.5,
             color="tab:blue",
         )
-        axis.plot(
-            patient["time"],
-            patient["predicted"],
-            "s--",
-            label="LYM previsto",
-            linewidth=2,
-            color="tab:orange",
-            zorder=3,
+        if not filled.empty:
+            axis.scatter(
+                filled["time"],
+                filled["lym"],
+                marker="X",
+                s=65,
+                label="LYM interpolado",
+                color="tab:red",
+                zorder=4,
+            )
+        prediction_interpolated = (
+            patient["interpolated"].fillna(False).astype(bool)
+            if "interpolated" in patient
+            else pd.Series(False, index=patient.index)
         )
+        for selected, label_suffix, marker in (
+            (~prediction_interpolated, "alvo original", "s"),
+            (prediction_interpolated, "alvo interpolado", "X"),
+        ):
+            points = patient.loc[selected]
+            if points.empty:
+                continue
+            axis.plot(
+                points["time"],
+                points["predicted"],
+                marker=marker,
+                linestyle="--",
+                label=f"LYM previsto ({label_suffix})",
+                linewidth=2,
+                color="tab:orange",
+                zorder=3,
+            )
         axis.set_title(
             f"{label} paciente — ID {result['id']:g} | "
             f"RMSE={result['rmse']:.3f} | MAE={result['mae']:.3f} | n={int(result['observations'])}"

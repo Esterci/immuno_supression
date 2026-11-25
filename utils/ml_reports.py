@@ -80,9 +80,32 @@ def regression_metrics(y, prediction, groups=None):
     return metrics
 
 
-def prediction_plot(y, prediction, path):
+def prediction_plot(y, prediction, path, interpolated=None):
+    y = np.asarray(y)
+    prediction = np.asarray(prediction)
+    if interpolated is None:
+        interpolated = np.zeros(len(y), dtype=bool)
+    interpolated = np.asarray(interpolated, dtype=bool)
+    if len(interpolated) != len(y):
+        raise ValueError("interpolated must have the same length as y")
+
     fig, axes = plt.subplots(1, 2, figsize=(11, 4))
-    axes[0].scatter(y, prediction, alpha=0.5, s=16)
+    styles = (
+        (~interpolated, "Observado originalmente", "#2563eb", "o"),
+        (interpolated, "Alvo interpolado", "#dc2626", "X"),
+    )
+    residual = y - prediction
+    for selected, label, color, marker in styles:
+        if not selected.any():
+            continue
+        axes[0].scatter(
+            y[selected], prediction[selected], alpha=0.65, s=28,
+            color=color, marker=marker, label=label,
+        )
+        axes[1].scatter(
+            prediction[selected], residual[selected], alpha=0.65, s=28,
+            color=color, marker=marker, label=label,
+        )
     low, high = min(min(y), min(prediction)), max(max(y), max(prediction))
     axes[0].plot([low, high], [low, high], "--", color="black")
     axes[0].set(
@@ -90,9 +113,11 @@ def prediction_plot(y, prediction, path):
         ylabel="LYM previsto",
         title="Medidas previsíveis dos pacientes de teste",
     )
-    axes[1].scatter(prediction, np.asarray(y) - prediction, alpha=0.5, s=16)
     axes[1].axhline(0, color="black", linestyle="--")
     axes[1].set(xlabel="LYM previsto", ylabel="Resíduo")
+    if interpolated.any():
+        axes[0].legend()
+        axes[1].legend()
     fig.tight_layout()
     fig.savefig(path, dpi=160)
     plt.close(fig)

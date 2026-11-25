@@ -17,7 +17,7 @@ class MLMethodsTest(unittest.TestCase):
         custom = parse_args(["--data", "custom.parquet"])
 
         self.assertEqual(default.data.name, "clean_processed.parquet")
-        self.assertEqual(temporal.data.name, "full_processed.parquet")
+        self.assertEqual(temporal.data.name, "clean_processed.parquet")
         self.assertEqual(custom.data, Path("custom.parquet"))
         self.assertEqual(default.models, list(model_specs()))
 
@@ -33,6 +33,52 @@ class MLMethodsTest(unittest.TestCase):
         self.assertEqual(rows["id"].nunique(), raw["id"].nunique())
         self.assertFalse(X.isna().any().any())
         self.assertEqual(len(X), len(y))
+
+    def test_global_exclusions_apply_in_both_variable_modes(self):
+        raw = self.data()
+        raw["ii"] = 12
+        raw["cmt"] = 2
+        raw["tad"] = 4
+        raw["gfc"] = 3
+
+        for var_mode in ("all", "time-series"):
+            X, _, _ = prepare_measurement_features(raw, var_mode=var_mode)
+            for excluded in ("ii", "cmt", "tad", "gfc"):
+                self.assertFalse(any(excluded in column for column in X.columns))
+
+            legacy_X, _, _ = prepare_features(
+                raw, 1, "none", var_mode=var_mode
+            )
+            for excluded in ("ii", "cmt", "tad", "gfc"):
+                self.assertFalse(
+                    any(excluded in column for column in legacy_X.columns)
+                )
+
+    def test_interpolation_flags_are_metadata_not_model_features(self):
+        raw = self.data()
+        raw["int_fg_dv_tac"] = 0
+        raw["int_fg_lym"] = raw["time"].eq(3).astype("int8")
+
+        X, _, rows = prepare_measurement_features(raw)
+        legacy_X, _, legacy_rows = prepare_features(raw, 1, "none")
+
+        self.assertFalse(any("int_fg_" in column for column in X.columns))
+        self.assertFalse(any("int_fg_" in column for column in legacy_X.columns))
+        self.assertFalse(legacy_rows["time"].eq(3).any())
+        self.assertIn("interpolated", rows.columns)
+        self.assertFalse(rows["interpolated"].any())
+        self.assertFalse(rows["time"].eq(3).any())
+        self.assertEqual(len(rows), 2 * raw["id"].nunique())
+
+        # O LYM interpolado em t=3 não vira alvo, mas é o valor anterior usado
+        # para construir os atributos da medida real seguinte, em t=4.
+        time_four = rows["time"].eq(4)
+        expected_previous_lym = (
+            raw.loc[raw["time"].eq(3)].sort_values("id")["lym"].to_numpy()
+        )
+        np.testing.assert_array_equal(
+            X.loc[time_four, "val_lym"], expected_previous_lym
+        )
 
     def test_measurement_format_uses_history_without_target_leakage(self):
         raw = self.data().sort_values(["id", "time"])

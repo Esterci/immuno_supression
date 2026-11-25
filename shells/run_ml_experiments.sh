@@ -6,6 +6,7 @@ set -euo pipefail
 PYTHON_BIN=${PYTHON_BIN:-python}
 VARMODE=${VARMODE:-all}
 USE_LYM=${USE_LYM:-1}
+INTERPOLATION=${INTERPOLATION:-0}
 OUTPUT_DIR=${OUTPUT_DIR:-studies/ml}
 PREPARE_DATA=${PREPARE_DATA:-1}
 OCC=${OCC:-1}
@@ -28,6 +29,10 @@ if [[ "$USE_LYM" != 0 && "$USE_LYM" != 1 ]]; then
     echo "USE_LYM deve ser 0 ou 1; recebido: $USE_LYM" >&2
     exit 2
 fi
+if [[ "$INTERPOLATION" != 0 && "$INTERPOLATION" != 1 ]]; then
+    echo "INTERPOLATION deve ser 0 ou 1; recebido: $INTERPOLATION" >&2
+    exit 2
+fi
 
 # --help não prepara nem treina.
 if [[ ${1:-} == --help ]]; then
@@ -40,6 +45,7 @@ if [[ "$PREPARE_DATA" == 1 ]]; then
     read -r -a occasions <<< "$OCC"
     "$PYTHON_BIN" -u data_preparation.py --occ "${occasions[@]}" \
         --var-mode "$VARMODE" \
+        --interpolation "$INTERPOLATION" \
         2>&1 | tee "$study_dir/data_preparation.log"
 fi
 read -r -a searches <<< "$SEARCHES"

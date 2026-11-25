@@ -19,9 +19,16 @@ import numpy as np
 import pandas as pd
 import scipy
 
-from data_preparation import merge_db, normalizar_colunas, translating_flags
+from data_preparation import (
+    EXCLUDED_VARIABLE_COLUMNS,
+    NON_TEMPORAL_COLUMNS,
+    merge_db,
+    normalizar_colunas,
+    select_occ5,
+    translating_flags,
+)
 from methods.interpolation import (
-    DEFAULT_SERIES,
+    INTERPOLATION_EXCLUSIONS,
     METHODS,
     SERIES_VALIDITY_RULES,
     calculate_metrics,
@@ -32,12 +39,25 @@ from methods.interpolation import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="LOOCV intrapaciente de metodos de interpolacao temporal"
     )
     parser.add_argument(
-        "--series", nargs="+", default=list(DEFAULT_SERIES), help="series continuas"
+        "--series",
+        nargs="+",
+        default=None,
+        help=(
+            "séries contínuas; por padrão são descobertas a partir da classificação "
+            "atual de variáveis"
+        ),
+    )
+    parser.add_argument(
+        "--occ",
+        type=int,
+        nargs="+",
+        default=[1],
+        help="ocasiões mantidas antes do merge (padrão: 1)",
     )
     parser.add_argument("--min-observations", type=int, default=5)
     parser.add_argument(
@@ -50,7 +70,7 @@ def parse_args() -> argparse.Namespace:
         "--output-dir", type=Path, default=ROOT / "studies" / "interpolation"
     )
     parser.add_argument("--study-name", default=None)
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def sha256(path: Path) -> str:
@@ -61,13 +81,47 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def load_pre_interpolation_data() -> pd.DataFrame:
+def load_pre_interpolation_data(occasions=(1,)) -> pd.DataFrame:
     data_dir = ROOT / "data"
     frames = []
     for name in ("lr_input", "mpa", "tacrolimus"):
         frame = normalizar_colunas(pd.read_parquet(data_dir / f"{name}.parquet"))
+        frame = select_occ5(frame, occasions)
         frames.append(frame.sort_values(["time", "id"]).reset_index(drop=True))
-    return translating_flags(merge_db(*frames)).sort_values(["id", "time"])
+    return translating_flags(merge_db(*frames, occ=occasions)).sort_values(
+        ["id", "time"]
+    )
+
+
+def classify_series(data: pd.DataFrame) -> pd.DataFrame:
+    """Classifica as colunas temporais para o protocolo de interpolação."""
+    ignored = {"id", "time", *NON_TEMPORAL_COLUMNS, *EXCLUDED_VARIABLE_COLUMNS}
+    rows = []
+    for column in data.columns:
+        if column in ignored:
+            continue
+        reason = INTERPOLATION_EXCLUSIONS.get(column)
+        observed = pd.to_numeric(data[column], errors="coerce").replace(
+            [np.inf, -np.inf], np.nan
+        )
+        valid = observed.notna()
+        if SERIES_VALIDITY_RULES.get(column) == "strictly_positive":
+            valid &= observed.gt(0)
+        counts = data.loc[valid].groupby("id").size().to_numpy(dtype=float)
+        rows.append(
+            {
+                "series": column,
+                "interpolation_eligible": reason is None,
+                "reason": reason or "série temporal contínua",
+                "observed_exams": int(valid.sum()),
+                "observed_patients": int(data.loc[valid, "id"].nunique()),
+                "observed_exams_per_patient_sd": float(
+                    np.std(counts, ddof=1) if len(counts) > 1 else 0.0
+                ),
+                "unique_values": int(observed.loc[valid].nunique()),
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def make_study_dir(base: Path, requested_name: str | None) -> Path:
@@ -83,24 +137,38 @@ def make_study_dir(base: Path, requested_name: str | None) -> Path:
     return target
 
 
-def save_metric_plot(macro: pd.DataFrame, target: Path) -> None:
-    series_names = macro["series"].drop_duplicates().tolist()
-    fig, axes = plt.subplots(
-        len(series_names),
-        1,
-        figsize=(11, max(4, 3.2 * len(series_names))),
-        squeeze=False,
+def save_metric_plots(macro: pd.DataFrame, target_dir: Path) -> list[str]:
+    """Salva um gráfico por série, sempre com média e DP entre pacientes."""
+    target_dir.mkdir(parents=True, exist_ok=True)
+    outputs = []
+    metrics = (
+        ("rmse", "patient_rmse_sd", "RMSE"),
+        ("mae", "patient_mae_sd", "MAE"),
+        ("mape_percent", "patient_mape_percent_sd", "MAPE (%)"),
     )
-    for axis, series in zip(axes[:, 0], series_names):
+    for series in macro["series"].drop_duplicates():
         subset = macro.loc[macro["series"].eq(series)].sort_values("rmse")
-        axis.barh(subset["method"], subset["rmse"], color="#4472C4")
-        axis.invert_yaxis()
-        axis.set_title(series)
-        axis.set_xlabel("RMSE macro (peso igual por paciente)")
-        axis.grid(axis="x", alpha=0.25)
-    fig.tight_layout()
-    fig.savefig(target, dpi=180, bbox_inches="tight")
-    plt.close(fig)
+        fig, axes = plt.subplots(1, 3, figsize=(19, max(5, 0.55 * len(subset) + 2)))
+        for axis, (metric, sd_column, label) in zip(axes, metrics):
+            axis.barh(
+                subset["method"],
+                subset[metric],
+                xerr=subset[sd_column].fillna(0),
+                color="#4472C4",
+                alpha=0.85,
+                capsize=3,
+            )
+            axis.invert_yaxis()
+            axis.set_title(label)
+            axis.set_xlabel(f"{label} macro ± DP entre pacientes")
+            axis.grid(axis="x", alpha=0.25)
+        fig.suptitle(f"Série: {series}", fontsize=14)
+        fig.tight_layout()
+        filename = f"{series}_metrics.png"
+        fig.savefig(target_dir / filename, dpi=180, bbox_inches="tight")
+        plt.close(fig)
+        outputs.append(f"plots/{filename}")
+    return outputs
 
 
 def write_report(
@@ -112,33 +180,39 @@ def write_report(
         "LOOCV intrapaciente restrito a exames internos (com observacoes antes e depois).",
         "As series usam MinMax ajustado apenas nos exames de treino do paciente.",
         "Folds com treino constante seguem o MinMaxScaler (amplitude efetiva igual a 1).",
-        "Erros usam `predito - observado`. MAE, RMSE e vies principais dao o mesmo peso",
+        "Erros usam `predito - observado`. MAE, RMSE, MAPE e vies dao o mesmo peso",
         "a cada paciente; as metricas `*_micro` sao fornecidas apenas para auditoria.",
+        "MAPE e calculado na escala original; observacoes reais iguais a zero sao excluidas.",
         "Em `m155`, zero e marcador estrutural sem medida e nao entra como exame observado.",
         "",
         "## Melhores metodos por serie",
         "",
-        "| Serie | Metodo | Pacientes | Exames | MAE | RMSE | Vies |",
-        "|---|---|---:|---:|---:|---:|---:|",
+        "| Serie | Metodo | Pacientes | Exames | MAE ± DP | RMSE ± DP | MAPE (%) ± DP | Vies ± DP |",
+        "|---|---|---:|---:|---:|---:|---:|---:|",
     ]
     for row in best.itertuples(index=False):
         lines.append(
             f"| {row.series} | {row.method} | {row.n_patients} | {row.n_exams} | "
-            f"{row.mae:.6g} | {row.rmse:.6g} | {row.bias:.6g} |"
+            f"{row.mae:.6g} ± {row.patient_mae_sd:.6g} | "
+            f"{row.rmse:.6g} ± {row.patient_rmse_sd:.6g} | "
+            f"{row.mape_percent:.6g} ± {row.patient_mape_percent_sd:.6g} | "
+            f"{row.bias:.6g} ± {row.patient_bias_sd:.6g} |"
         )
     lines.extend(
         [
             "",
             "## Elegibilidade",
             "",
-            "| Serie | Observados | Pacientes observados | Pacientes elegiveis | Exames LOOCV |",
+            "| Serie | Observados (DP/paciente) | Pacientes observados | Pacientes elegiveis | Exames LOOCV (DP/paciente) |",
             "|---|---:|---:|---:|---:|",
         ]
     )
     for row in eligibility.itertuples(index=False):
         lines.append(
-            f"| {row.series} | {row.observed_exams} | {row.observed_patients} | "
-            f"{row.eligible_patients} | {row.eligible_exams_per_method} |"
+            f"| {row.series} | {row.observed_exams} "
+            f"({row.observed_exams_per_patient_sd:.3g}) | {row.observed_patients} | "
+            f"{row.eligible_patients} | {row.eligible_exams_per_method} "
+            f"({row.eligible_exams_per_patient_sd:.3g}) |"
         )
     lines.extend(
         [
@@ -156,10 +230,15 @@ def main() -> int:
     args = parse_args()
     started = datetime.now(timezone.utc)
     study_dir = make_study_dir(args.output_dir, args.study_name)
-    data = load_pre_interpolation_data()
+    data = load_pre_interpolation_data(args.occ)
+    series_catalog = classify_series(data)
+    discovered_series = series_catalog.loc[
+        series_catalog["interpolation_eligible"], "series"
+    ].tolist()
+    series = args.series if args.series is not None else discovered_series
     predictions, eligibility = run_patient_loocv(
         data,
-        series_names=args.series,
+        series_names=series,
         min_observations=args.min_observations,
         normalization=args.normalization,
     )
@@ -175,14 +254,15 @@ def main() -> int:
     macro.to_csv(study_dir / "macro_metrics.csv", index=False)
     best.to_csv(study_dir / "best_methods.csv", index=False)
     eligibility.to_csv(study_dir / "eligibility.csv", index=False)
-    save_metric_plot(macro, study_dir / "rmse_comparison.png")
+    series_catalog.to_csv(study_dir / "series_catalog.csv", index=False)
+    plot_paths = save_metric_plots(macro, study_dir / "plots")
     write_report(study_dir / "README.md", eligibility, macro, best)
 
     source_dir = study_dir / "source"
     source_dir.mkdir()
     for relative in (
         "data_preparation.py",
-        "methods/interpolation_validation.py",
+        "methods/interpolation.py",
         "runners/run_interpolation_study.py",
     ):
         source = ROOT / relative
@@ -207,6 +287,8 @@ def main() -> int:
                 "mae": "mean of patient MAE",
                 "rmse": "sqrt(mean of patient MSE)",
                 "bias": "mean of patient mean(predicted - observed)",
+                "mape": "mean of patient MAPE on original scale; observed zero excluded",
+                "standard_deviation": "sample SD across patient-level metrics",
             },
             "selection": "minimum macro RMSE, then macro MAE",
             "min_observations": args.min_observations,
@@ -221,13 +303,13 @@ def main() -> int:
                 "constant_training_range": "effective range 1, matching MinMaxScaler",
             },
         },
-        "series": args.series,
+        "series": series,
+        "series_selection": (
+            "explicit --series" if args.series is not None else "automatic taxonomy"
+        ),
+        "occasions": args.occ,
         "series_validity_rules": SERIES_VALIDITY_RULES,
-        "excluded_by_semantics": {
-            "binary_indicators": ["ifc", "oifc", "cmv", "bkv", "dm"],
-            "treatments_or_timing": ["amt_tac", "amt_map", "tad"],
-            "static": ["age", "sex", "hgt", "dty", "dage", "cisq", "dyl"],
-        },
+        "excluded_by_semantics": INTERPOLATION_EXCLUSIONS,
         "methods": list(METHODS),
         "inputs": inputs,
         "outputs": {
@@ -236,7 +318,8 @@ def main() -> int:
             "macro_metrics": "macro_metrics.csv",
             "best_methods": "best_methods.csv",
             "eligibility": "eligibility.csv",
-            "plot": "rmse_comparison.png",
+            "series_catalog": "series_catalog.csv",
+            "plots": plot_paths,
         },
         "versions": {
             "python": platform.python_version(),

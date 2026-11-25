@@ -1,37 +1,0 @@
-
-Pacientes elegíveis para a análise após a formatação temporal:
-  Antes de prepare_measurement_features: 58
-  Depois de prepare_measurement_features: 26
-  Removidos por histórico temporal insuficiente: 32
-Experimento: /home/thiago.esterci/Repositories/immuno_supression/studies/ml/study_20261124T185642Z_p4kP49/20261124T185725_147096Z_random_all_vars-time-series_measurement-history_folds5_seed42
-Treino: 109 linhas; teste: 34 linhas
-
-random_forest: 30 candidatos x 5 folds + refit
-Fitting 5 folds for each of 30 candidates, totalling 150 fits
-  R² CV: 0.5442; RMSE teste: 5.1918; calculando SHAP...
-PermutationExplainer explainer:  56%|#####5    | 19/34 [00:00<?, ?it/s]PermutationExplainer explainer:  65%|######4   | 22/34 [00:10<00:00, 16.74it/s]PermutationExplainer explainer:  71%|#######   | 24/34 [00:10<00:00, 13.80it/s]PermutationExplainer explainer:  76%|#######6  | 26/34 [00:10<00:00, 12.76it/s]PermutationExplainer explainer:  82%|########2 | 28/34 [00:10<00:00, 12.21it/s]PermutationExplainer explainer:  88%|########8 | 30/34 [00:10<00:00, 11.92it/s]PermutationExplainer explainer:  94%|#########4| 32/34 [00:11<00:00, 11.48it/s]PermutationExplainer explainer: 100%|##########| 34/34 [00:11<00:00, 11.43it/s]PermutationExplainer explainer: 35it [00:11,  1.41it/s]                        
-
-gradient_boosting: 30 candidatos x 5 folds + refit
-Fitting 5 folds for each of 30 candidates, totalling 150 fits
-  R² CV: 0.5676; RMSE teste: 6.2085; calculando SHAP...
-
-adaboost: 30 candidatos x 5 folds + refit
-Fitting 5 folds for each of 30 candidates, totalling 150 fits
-  R² CV: 0.5615; RMSE teste: 5.6956; calculando SHAP...
-
-Resultados no conjunto de teste:
-    rmse      mae       r2  mape_percent_nonzero  mape_excluded_zeros  rmse_patient_sd  mae_patient_sd  mape_percent_nonzero_patient_sd  metric_patient_count             model    cv_r2  fit_seconds
-5.191798 3.024930 0.766687             15.356902                    0         4.109904        2.421121                        22.158575                     6     random_forest 0.544171     6.386106
-6.208456 4.577174 0.666366             20.453568                    0         3.653272        2.340100                        19.948444                     6 gradient_boosting 0.567624     1.817297
-5.695584 4.250985 0.719212             23.771523                    0         3.567785        2.070959                        27.237364                     6          adaboost 0.561484     3.322991
-
-Gerando análise temporal por paciente...
-            model classification   id  observations      rmse      mae      bias  time_min  time_max
-    random_forest           best 12.0           4.0  0.845944 0.755504  0.704143     170.0    695.95
-    random_forest          worst 10.0           4.0 11.938799 6.780686 -5.119251      98.0    671.95
-gradient_boosting           best 12.0           4.0  1.351239 1.225712  1.225712     170.0    695.95
-gradient_boosting          worst 10.0           4.0 11.507797 6.002632 -5.501490      98.0    671.95
-         adaboost           best 17.0           4.0  2.348648 2.163378  2.163378     146.0   3839.95
-         adaboost          worst 10.0           4.0 11.902224 7.491886 -4.262659      98.0    671.95
-
-Análise salva em: /home/thiago.esterci/Repositories/immuno_supression/studies/ml/study_20261124T185642Z_p4kP49/20261124T185725_147096Z_random_all_vars-time-series_measurement-history_folds5_seed42/patient_temporal_analysis
