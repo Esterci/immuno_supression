@@ -1,0 +1,7 @@
+series,observed_exams,observed_patients,observed_exams_per_patient_sd,eligible_patients,eligible_exams_per_method,eligible_exams_per_patient_sd,duplicate_rows_collapsed,min_observations,normalization
+m155,183,58,1.348185579108781,11,33,0.0,0,5,patient-train-minmax
+wgt,1525,58,9.90836722557405,55,1409,8.30994698269603,0,5,patient-train-minmax
+gf,1524,58,9.902672160102334,55,1408,8.305732067986856,0,5,patient-train-minmax
+lym,1162,56,8.743309130155158,52,1052,7.1499770591031515,0,5,patient-train-minmax
+dv_tac,1102,58,5.794734451933156,58,986,5.794734451933156,0,5,patient-train-minmax
+dv_map,1071,56,6.114253094948794,55,957,5.81059058641744,0,5,patient-train-minmax

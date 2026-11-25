@@ -1,0 +1,14 @@
+{
+  "rmse": 10.324125231456797,
+  "mae": 7.9994580774722985,
+  "r2": -0.2880302240625652,
+  "mape_percent_nonzero": 123.8801418471298,
+  "mape_excluded_zeros": 0,
+  "rmse_patient_sd": 4.851749214108611,
+  "mae_patient_sd": 4.7326707568990445,
+  "mape_percent_nonzero_patient_sd": 244.1622872413506,
+  "metric_patient_count": 11,
+  "model": "random_forest",
+  "cv_r2": -0.0023909904959339865,
+  "fit_seconds": 10.333144610998716
+}

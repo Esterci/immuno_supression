@@ -9,7 +9,16 @@ import pandas as pd
 from scipy.interpolate import CubicSpline, PchipInterpolator
 
 
+# Séries cuja semântica permite comparar interpoladores contínuos. A seleção
+# padrão do estudo também descobre novas colunas temporais; esta tupla mantém a
+# API pública e documenta as séries atualmente conhecidas.
 DEFAULT_SERIES = ("m155", "wgt", "gf", "lym", "dv_tac", "dv_map")
+
+# Colunas temporais que exigem outro protocolo, em vez de interpolação contínua.
+INTERPOLATION_EXCLUSIONS = {
+    "amt_tac": "evento/dose prescrita, não uma medida contínua",
+    "amt_map": "evento/dose prescrita, não uma medida contínua",
+}
 SERIES_VALIDITY_RULES = {
     # No conjunto original, zero e uma linha estrutural sem medida de miR155.
     "m155": "strictly_positive",
@@ -110,6 +119,8 @@ def run_patient_loocv(
         observed = observed.reset_index(drop=True)
         eligible_patients = 0
         eligible_exams = 0
+        observed_counts = observed.groupby("id").size().to_numpy(dtype=float)
+        eligible_counts: list[int] = []
         for patient_id, patient in observed.groupby("id", sort=True):
             patient = patient.sort_values("time")
             n_observed = len(patient)
@@ -118,6 +129,7 @@ def run_patient_loocv(
                 continue
             eligible_patients += 1
             eligible_exams += n_eligible
+            eligible_counts.append(n_eligible)
             times = patient["time"].to_numpy(dtype=float)
             values = patient[series].to_numpy(dtype=float)
 
@@ -148,6 +160,14 @@ def run_patient_loocv(
                             f"{target_time=}, {method_name=}"
                         )
                     error = predicted - observed_value
+                    predicted_original = predicted * scale_range + scale_min
+                    ape_percent_original = (
+                        abs(predicted_original - observed_original)
+                        / abs(observed_original)
+                        * 100
+                        if observed_original != 0
+                        else np.nan
+                    )
                     predictions.append(
                         {
                             "series": series,
@@ -159,7 +179,7 @@ def run_patient_loocv(
                             "observed": observed_value,
                             "predicted": predicted,
                             "observed_original": observed_original,
-                            "predicted_original": predicted * scale_range + scale_min,
+                            "predicted_original": predicted_original,
                             "normalization": normalization,
                             "scale_min": scale_min,
                             "scale_max": scale_max,
@@ -167,6 +187,7 @@ def run_patient_loocv(
                             "error": error,
                             "absolute_error": abs(error),
                             "squared_error": error**2,
+                            "ape_percent_original": ape_percent_original,
                         }
                     )
 
@@ -175,8 +196,14 @@ def run_patient_loocv(
                 "series": series,
                 "observed_exams": len(observed),
                 "observed_patients": int(observed["id"].nunique()),
+                "observed_exams_per_patient_sd": float(
+                    np.std(observed_counts, ddof=1) if len(observed_counts) > 1 else 0.0
+                ),
                 "eligible_patients": eligible_patients,
                 "eligible_exams_per_method": eligible_exams,
+                "eligible_exams_per_patient_sd": float(
+                    np.std(eligible_counts, ddof=1) if len(eligible_counts) > 1 else 0.0
+                ),
                 "duplicate_rows_collapsed": duplicate_count,
                 "min_observations": min_observations,
                 "normalization": normalization,
@@ -193,13 +220,22 @@ def calculate_metrics(
     if predictions.empty:
         raise ValueError("nenhuma predicao elegivel")
 
+    predictions = predictions.copy()
+    if "ape_percent_original" not in predictions:
+        predictions["ape_percent_original"] = np.nan
+
     patient = (
         predictions.groupby(["series", "method", "id"], as_index=False)
         .agg(
             n_exams=("error", "size"),
             mae=("absolute_error", "mean"),
+            mae_sd=("absolute_error", "std"),
             mse=("squared_error", "mean"),
             bias=("error", "mean"),
+            error_sd=("error", "std"),
+            mape_percent=("ape_percent_original", "mean"),
+            mape_percent_sd=("ape_percent_original", "std"),
+            mape_n=("ape_percent_original", "count"),
         )
         .sort_values(["series", "method", "id"])
     )
@@ -220,13 +256,22 @@ def calculate_metrics(
                 "mae": float(patient_group["mae"].mean()),
                 "rmse": float(np.sqrt(patient_group["mse"].mean())),
                 "bias": float(patient_group["bias"].mean()),
+                "mape_percent": float(patient_group["mape_percent"].mean()),
                 "patient_mae_sd": float(patient_group["mae"].std(ddof=1)),
                 "patient_rmse_mean": float(patient_group["rmse"].mean()),
                 "patient_rmse_sd": float(patient_group["rmse"].std(ddof=1)),
                 "patient_bias_sd": float(patient_group["bias"].std(ddof=1)),
+                "patient_mape_percent_sd": float(
+                    patient_group["mape_percent"].std(ddof=1)
+                ),
+                "mape_patients": int(patient_group["mape_percent"].notna().sum()),
+                "mape_exams": int(patient_group["mape_n"].sum()),
                 "mae_micro": float(point_group["absolute_error"].mean()),
                 "rmse_micro": float(np.sqrt(point_group["squared_error"].mean())),
                 "bias_micro": float(point_group["error"].mean()),
+                "mape_percent_micro": float(
+                    point_group["ape_percent_original"].mean()
+                ),
             }
         )
 

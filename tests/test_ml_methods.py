@@ -6,19 +6,152 @@ import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.base import clone
 from methods.ml_models import prepare_features, model_specs, make_search
-from runners.run_ml_experiment import parse_args
+from runners.run_ml_experiment import parse_args, prepare_measurement_features
 from utils.ml_reports import regression_metrics
 
 
 class MLMethodsTest(unittest.TestCase):
-    def test_default_dataset_depends_on_variable_mode(self):
+    def test_default_dataset_is_clean_processed(self):
+        default = parse_args([])
         temporal = parse_args(["--var-mode", "time-series"])
-        clinical = parse_args(["--var-mode", "all"])
-        custom = parse_args(["--var-mode", "time-series", "--data", "custom.parquet"])
+        custom = parse_args(["--data", "custom.parquet"])
 
-        self.assertEqual(temporal.data.name, "full_processed.parquet")
-        self.assertEqual(clinical.data.name, "clean_processed.parquet")
+        self.assertEqual(default.data.name, "clean_processed.parquet")
+        self.assertEqual(temporal.data.name, "clean_processed.parquet")
         self.assertEqual(custom.data, Path("custom.parquet"))
+        self.assertEqual(default.models, list(model_specs()))
+
+    def test_measurement_time_series_mode_excludes_non_temporal_variables(self):
+        raw = self.data()
+        raw["cisq"] = np.nan
+
+        X, y, rows = prepare_measurement_features(raw, var_mode="time-series")
+
+        self.assertNotIn("age", X.columns)
+        self.assertNotIn("cisq", X.columns)
+        self.assertIn("time", X.columns)
+        self.assertEqual(rows["id"].nunique(), raw["id"].nunique())
+        self.assertFalse(X.isna().any().any())
+        self.assertEqual(len(X), len(y))
+
+    def test_global_exclusions_apply_in_both_variable_modes(self):
+        raw = self.data()
+        raw["ii"] = 12
+        raw["cmt"] = 2
+        raw["tad"] = 4
+        raw["gfc"] = 3
+
+        for var_mode in ("all", "time-series"):
+            X, _, _ = prepare_measurement_features(raw, var_mode=var_mode)
+            for excluded in ("ii", "cmt", "tad", "gfc"):
+                self.assertFalse(any(excluded in column for column in X.columns))
+
+            legacy_X, _, _ = prepare_features(
+                raw, 1, "none", var_mode=var_mode
+            )
+            for excluded in ("ii", "cmt", "tad", "gfc"):
+                self.assertFalse(
+                    any(excluded in column for column in legacy_X.columns)
+                )
+
+    def test_interpolation_flags_are_metadata_not_model_features(self):
+        raw = self.data()
+        raw["int_fg_dv_tac"] = 0
+        raw["int_fg_lym"] = raw["time"].eq(3).astype("int8")
+
+        X, _, rows = prepare_measurement_features(raw)
+        legacy_X, _, legacy_rows = prepare_features(raw, 1, "none")
+
+        self.assertFalse(any("int_fg_" in column for column in X.columns))
+        self.assertFalse(any("int_fg_" in column for column in legacy_X.columns))
+        self.assertFalse(legacy_rows["time"].eq(3).any())
+        self.assertIn("interpolated", rows.columns)
+        self.assertFalse(rows["interpolated"].any())
+        self.assertFalse(rows["time"].eq(3).any())
+        self.assertEqual(len(rows), 2 * raw["id"].nunique())
+
+        # O LYM interpolado em t=3 não vira alvo, mas é o valor anterior usado
+        # para construir os atributos da medida real seguinte, em t=4.
+        time_four = rows["time"].eq(4)
+        expected_previous_lym = (
+            raw.loc[raw["time"].eq(3)].sort_values("id")["lym"].to_numpy()
+        )
+        np.testing.assert_array_equal(
+            X.loc[time_four, "val_lym"], expected_previous_lym
+        )
+
+    def test_measurement_format_uses_history_without_target_leakage(self):
+        raw = self.data().sort_values(["id", "time"])
+        X, y, rows = prepare_measurement_features(raw, use_lym=False)
+
+        self.assertEqual(len(X), 3 * raw["id"].nunique())
+        self.assertIn("time", X.columns)
+        self.assertIn("age", X.columns)
+        self.assertIn("initial_dv_tac", X.columns)
+        self.assertIn("val_dv_tac", X.columns)
+        self.assertIn("d_time_dv_tac", X.columns)
+        self.assertIn("tend_dv_tac", X.columns)
+        self.assertFalse(any("lym" in column for column in X.columns))
+        self.assertNotIn("id", X.columns)
+        predictable = raw["time"] >= 2
+        pd.testing.assert_series_equal(
+            y, raw.loc[predictable, "lym"].reset_index(drop=True), check_names=True
+        )
+        pd.testing.assert_frame_equal(
+            rows,
+            raw.loc[predictable, ["id", "time"]].reset_index(drop=True),
+        )
+
+        patient = rows.id == 0
+        np.testing.assert_array_equal(X.loc[patient, "initial_dv_tac"], 0)
+        np.testing.assert_array_equal(
+            X.loc[patient, "val_dv_tac"], [1, 2, 3]
+        )
+        np.testing.assert_array_equal(rows.loc[patient, "time"], [2, 3, 4])
+        self.assertFalse(X.isna().any().any())
+
+    def test_measurement_format_optionally_uses_only_previous_lym(self):
+        raw = self.data().sort_values(["id", "time"])
+
+        with_lym, target, rows = prepare_measurement_features(raw, use_lym=True)
+        without_lym, _, _ = prepare_measurement_features(raw, use_lym=False)
+
+        self.assertTrue(
+            {"initial_lym", "d_time_lym", "val_lym", "tend_lym"}.issubset(
+                with_lym.columns
+            )
+        )
+        self.assertFalse(any(column.endswith("_lym") for column in without_lym))
+        patient = rows["id"].eq(0)
+        np.testing.assert_array_equal(with_lym.loc[patient, "val_lym"], [1, 2, 3])
+        np.testing.assert_array_equal(target.loc[patient], [2, 3, 4])
+
+        changed = raw.copy()
+        changed.loc[(changed["id"] == 0) & (changed["time"] == 4), "lym"] = 999
+        changed_X, _, _ = prepare_measurement_features(changed, use_lym=True)
+        pd.testing.assert_frame_equal(with_lym, changed_X)
+
+    def test_all_pipeline_normalizes_measurement_features(self):
+        X, y, rows = prepare_measurement_features(self.data())
+        train = rows.id < 6
+        model, params = model_specs(quick=True)["random_forest"]
+        search = make_search(model, params, "grid", 2, 1, 42, 1, "all")
+        search.fit(X[train], y[train], groups=rows.loc[train, "id"])
+
+        transformed = search.best_estimator_[:-1].transform(X[train])
+        self.assertFalse(transformed.isna().any().any())
+        self.assertTrue((transformed.min() >= 0).all())
+        self.assertTrue((transformed.max() <= 1).all())
+
+    def test_patients_with_only_one_predictable_measurement_are_kept(self):
+        raw = self.data()
+        raw = raw.loc[~((raw["id"] == 0) & (raw["time"] > 2))]
+
+        X, _, rows = prepare_measurement_features(raw)
+
+        self.assertIn(0, rows["id"].unique())
+        self.assertEqual((rows["id"] == 0).sum(), 1)
+        self.assertEqual(len(X), 1 + 3 * 7)
 
     def test_normalization_modes_preserve_metadata_and_target(self):
         raw = self.data()
@@ -192,6 +325,24 @@ class MLMethodsTest(unittest.TestCase):
         self.assertIsNone(result["r2"])
         self.assertIsNone(result["mape_percent_nonzero"])
         self.assertEqual(result["mape_excluded_zeros"], 2)
+
+    def test_metric_standard_deviation_is_calculated_between_patients(self):
+        result = regression_metrics(
+            [1, 3, 2, 6],
+            [0, 2, 0, 2],
+            groups=[10, 10, 20, 20],
+        )
+
+        # Patient RMSE values are 1 and sqrt(10); MAE values are 1 and 3.
+        self.assertAlmostEqual(
+            result["rmse_patient_sd"], np.std([1, np.sqrt(10)], ddof=1)
+        )
+        self.assertAlmostEqual(result["mae_patient_sd"], np.std([1, 3], ddof=1))
+        self.assertAlmostEqual(
+            result["mape_percent_nonzero_patient_sd"],
+            np.std([100 * (1 + 1 / 3) / 2, 100 * (1 + 4 / 6) / 2], ddof=1),
+        )
+        self.assertEqual(result["metric_patient_count"], 2)
 
 
 if __name__ == "__main__":

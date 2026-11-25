@@ -21,9 +21,14 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from dash import MATCH, Dash, Input, Output, State, dcc, html
+from dash import Dash, Input, Output, dcc, html
 
-from data_preparation import merge_db, normalizar_colunas, translating_flags
+from data_preparation import (
+    INTERPOLATION_FLAG_PREFIX,
+    merge_db,
+    normalizar_colunas,
+    translating_flags,
+)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -80,10 +85,12 @@ PATIENT_IDS = sorted(
     }
 )
 
-STUDY_SOURCES = {
-    str(path.parent.parent.relative_to(ROOT)): path
-    for path in sorted((ROOT / "studies").glob("**/source/data_preparation.py"))
+EXPERIMENTS = {
+    str(path.parent.relative_to(ROOT)): path.parent
+    for path in sorted((ROOT / "studies" / "ml").glob("**/metadata.json"))
+    if any(path.parent.glob("*/predictions.csv"))
 }
+DEFAULT_EXPERIMENT = next(reversed(EXPERIMENTS), None)
 
 
 SERIES = {
@@ -109,6 +116,24 @@ STAGES = {
 
 BINARY_SERIES = {"infection", "other_infection", "cmv_infection", "bkv_infection"}
 
+OCCASIONS = {
+    1: "Primeira semana",
+    2: "Mês 1",
+    3: "Mês 2",
+    4: "Mês 3",
+    5: "Mês 6",
+}
+
+
+def occasion_options() -> list[dict[str, int | str]]:
+    return [
+        {
+            "label": f"Ocorrência {occasion} — {description}",
+            "value": occasion,
+        }
+        for occasion, description in OCCASIONS.items()
+    ]
+
 
 def format_study_date(value: str | None) -> str:
     if not value:
@@ -127,51 +152,205 @@ def format_study_date(value: str | None) -> str:
         return value
 
 
-def study_description(study_key: str):
-    """Create a short, human-readable description from a study metadata file."""
-    if study_key == "current":
-        metadata_path = DATA_DIR / "data_preparation_metadata.json"
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-        return [
-            html.Strong("Pipeline atual. "),
-            html.Span(
-                f"Dados gerados em {format_study_date(metadata.get('gerado_em_utc'))}. "
-                "Não é uma execução de ML, portanto número de lags e folds não se aplicam."
-            ),
-        ]
-
-    metadata_path = ROOT / study_key / "metadata.json"
+def experiment_summary(study_key: str | None) -> dict | None:
+    """Load a compact, backwards-compatible summary of an ML experiment."""
+    if not study_key or study_key not in EXPERIMENTS:
+        return None
+    metadata_path = EXPERIMENTS[study_key] / "metadata.json"
     if not metadata_path.exists():
-        return "Metadados não disponíveis para este estudo."
+        return None
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     config = metadata.get("config") or {}
-    started = format_study_date(metadata.get("started_at_utc"))
-    details = [f"Data: {started}"]
+    preparation = metadata.get("data_preparation") or {}
 
-    if config:
-        details.extend(
-            [
-                f"lags: {config.get('lags', 'não informado')}",
-                f"folds: {config.get('folds', 'não informado')}",
-                f"busca: {config.get('search', 'não informada')}",
-                f"normalização: {config.get('normalization', 'não informada')}",
-                f"modo de variáveis: {config.get('var_mode', 'não informado')}",
-            ]
+    occasions = preparation.get("occasions")
+    interpolation_applied = preparation.get("interpolation_applied")
+    archived_preparation = EXPERIMENTS[study_key] / "data_preparation_metadata.json"
+    if archived_preparation.exists() and (
+        occasions is None or interpolation_applied is None
+    ):
+        details = json.loads(archived_preparation.read_text(encoding="utf-8"))
+        selection = details.get("selecao_occ") or {}
+        interpolation = details.get("interpolacao") or {}
+        if occasions is None:
+            occasions = selection.get("ocasioes_mantidas")
+        if interpolation_applied is None:
+            interpolation_applied = interpolation.get("aplicada")
+
+    use_lym = config.get("use_lym")
+    if use_lym is None:
+        features = metadata.get("features") or []
+        use_lym = any(
+            feature in {"initial_lym", "d_time_lym", "val_lym", "tend_lym"}
+            for feature in features
         )
-    else:
-        protocol = metadata.get("protocol") or {}
-        details.extend(
-            [
-                "tipo: estudo de interpolação",
-                f"observações mínimas: {protocol.get('min_observations', 'não informado')}",
-                f"séries avaliadas: {len(metadata.get('series') or [])}",
-                "lags: não se aplica",
-            ]
-        )
-    return [
-        html.Strong(f"{Path(study_key).name}. "),
-        html.Span("; ".join(details) + "."),
+
+    models = metadata.get("models") or {}
+    model_names = list(models) if isinstance(models, dict) else models
+    return {
+        "name": Path(study_key).name,
+        "date": format_study_date(metadata.get("started_at_utc")),
+        "folds": config.get("folds"),
+        "search": config.get("search"),
+        "normalization": config.get("normalization"),
+        "variable_mode": config.get("var_mode"),
+        "occasions": occasions or [],
+        "use_lym": bool(use_lym),
+        "interpolation_applied": (
+            None if interpolation_applied is None else bool(interpolation_applied)
+        ),
+        "models": model_names,
+    }
+
+
+def study_description(study_key: str | None) -> html.Div:
+    """Render experiment metadata as a visual panel instead of prose."""
+    summary = experiment_summary(study_key)
+    if summary is None:
+        return html.Div("Nenhum experimento de ML compatível foi encontrado.")
+
+    occasions = ", ".join(str(value) for value in summary["occasions"]) or "N/D"
+    models = ", ".join(
+        str(model).replace("_", " ").title() for model in summary["models"]
+    ) or "N/D"
+    items = [
+        ("Data", summary["date"]),
+        ("Ocorrências", occasions),
+        ("Histórico de LYM", "Sim" if summary["use_lym"] else "Não"),
+        ("Variáveis", summary["variable_mode"] or "N/D"),
+        ("Validação", f"{summary['folds']} folds" if summary["folds"] else "N/D"),
+        ("Busca", summary["search"] or "N/D"),
+        ("Normalização", summary["normalization"] or "N/D"),
+        (
+            "Interpolação prévia",
+            (
+                "N/D"
+                if summary["interpolation_applied"] is None
+                else "Sim" if summary["interpolation_applied"] else "Não"
+            ),
+        ),
+        ("Modelos", models),
     ]
+
+    cards = [
+        html.Div(
+            [
+                html.Div(label, style={"fontSize": "0.76rem", "color": "#64748b"}),
+                html.Div(
+                    value,
+                    style={"fontWeight": 650, "marginTop": "3px", "color": "#0f172a"},
+                ),
+            ],
+            style={
+                "backgroundColor": "#f8fafc",
+                "border": "1px solid #e2e8f0",
+                "borderRadius": "9px",
+                "padding": "9px 11px",
+            },
+        )
+        for label, value in items
+    ]
+    return html.Div(
+        [
+            html.H3(summary["name"], style={"margin": "2px 0 10px"}),
+            html.Div(
+                cards,
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "repeat(auto-fit, minmax(150px, 1fr))",
+                    "gap": "8px",
+                },
+            ),
+        ]
+    )
+
+
+@lru_cache(maxsize=None)
+def experiment_test_patients(study_key: str | None) -> pd.DataFrame:
+    """Return test patient IDs and evaluated row counts for one experiment."""
+    columns = ["id", "measurements"]
+    if not study_key or study_key not in EXPERIMENTS:
+        return pd.DataFrame(columns=columns)
+
+    experiment = EXPERIMENTS[study_key]
+    split_path = experiment / "splits.csv"
+    if split_path.exists():
+        splits = pd.read_csv(split_path)
+        if {"id", "split"}.issubset(splits.columns):
+            test = splits.loc[splits["split"].astype(str).str.lower().eq("test")]
+            if not test.empty:
+                result = (
+                    test.groupby("id", as_index=False)
+                    .size()
+                    .rename(columns={"size": "measurements"})
+                )
+                result["id"] = pd.to_numeric(result["id"], errors="coerce")
+                return result.dropna(subset=["id"]).sort_values("id").reset_index(
+                    drop=True
+                )
+
+    # Compatibility with archived studies that predate splits.csv.
+    prediction_frames = []
+    for prediction_path in experiment.glob("*/predictions.csv"):
+        predictions = pd.read_csv(prediction_path, usecols=lambda name: name == "id")
+        if "id" in predictions:
+            prediction_frames.append(predictions[["id"]])
+    if not prediction_frames:
+        return pd.DataFrame(columns=columns)
+    predictions = pd.concat(prediction_frames, ignore_index=True).drop_duplicates()
+    predictions["id"] = pd.to_numeric(predictions["id"], errors="coerce")
+    result = predictions.dropna(subset=["id"]).sort_values("id").reset_index(drop=True)
+    result["measurements"] = pd.NA
+    return result[columns]
+
+
+def test_patients_panel(study_key: str | None) -> html.Div:
+    """Render the patients that compose the selected experiment test set."""
+    patients = experiment_test_patients(study_key)
+    if patients.empty:
+        return html.Div(
+            [
+                html.Strong("Pacientes do conjunto de teste"),
+                html.P(
+                    "Não foi possível identificar pacientes de teste neste experimento.",
+                    style={"margin": "8px 0 0", "color": "#64748b"},
+                ),
+            ]
+        )
+
+    badges = []
+    for row in patients.itertuples(index=False):
+        patient_id = int(row.id) if float(row.id).is_integer() else row.id
+        count = (
+            f" · {int(row.measurements)} medidas"
+            if pd.notna(row.measurements)
+            else ""
+        )
+        badges.append(
+            html.Span(
+                f"Paciente {patient_id}{count}",
+                style={
+                    "display": "inline-block",
+                    "backgroundColor": "#e0f2fe",
+                    "border": "1px solid #7dd3fc",
+                    "borderRadius": "999px",
+                    "color": "#075985",
+                    "fontSize": "0.86rem",
+                    "fontWeight": 600,
+                    "margin": "5px 7px 0 0",
+                    "padding": "5px 10px",
+                },
+            )
+        )
+    return html.Div(
+        [
+            html.Strong(
+                f"Pacientes do conjunto de teste ({len(patients)})",
+                style={"display": "block"},
+            ),
+            html.Div(badges, style={"marginTop": "3px"}),
+        ]
+    )
 
 
 def binary_patient_status(patient_id: int, column: str) -> str:
@@ -328,11 +507,19 @@ def style_figure(figure: go.Figure, title: str, y_title: str) -> go.Figure:
     return figure
 
 
-def original_patient_series(patient_id: int) -> dict[str, pd.DataFrame]:
+def original_patient_series(
+    patient_id: int, occasion: int | None = None
+) -> dict[str, pd.DataFrame]:
     """Prepare concentrations, recorded doses and biomarker values for a patient."""
     tac = DATA["tacrolimus"]
     mpa = DATA["mpa"]
     mir = DATA["mir155"]
+
+    if occasion is not None:
+        occasion = int(occasion)
+        tac = tac.loc[pd.to_numeric(tac["OCC"], errors="coerce") == occasion]
+        mpa = mpa.loc[pd.to_numeric(mpa["OCC"], errors="coerce") == occasion]
+        mir = mir.loc[pd.to_numeric(mir["OCC"], errors="coerce") == occasion]
 
     tac_observations = tac.loc[
         (tac["#ID"] == patient_id) & (tac["MDV"] == 0) & (tac["EVID"] == 0)
@@ -406,6 +593,18 @@ def original_patient_series(patient_id: int) -> dict[str, pd.DataFrame]:
     }
 
 
+@lru_cache(maxsize=None)
+def population_measure_counts(series_key: str, occasion: int) -> pd.DataFrame:
+    """Count original measurements for every patient in one occasion."""
+    if series_key not in SERIES:
+        raise ValueError(f"Série desconhecida: {series_key}")
+    rows = []
+    for patient_id in PATIENT_IDS:
+        frame = original_patient_series(patient_id, occasion)[series_key]
+        rows.append({"patient_id": patient_id, "count": len(frame)})
+    return pd.DataFrame(rows)
+
+
 def processed_patient_series(
     frame: pd.DataFrame, patient_id: int
 ) -> dict[str, pd.DataFrame]:
@@ -413,13 +612,32 @@ def processed_patient_series(
     patient = frame.loc[frame["id"] == patient_id].copy()
 
     def make_series(column: str, *, positive: bool = False, exponentiate: bool = False):
-        selected = patient.loc[patient[column].notna(), ["time", column]].copy()
+        flag_column = f"{INTERPOLATION_FLAG_PREFIX}{column}"
+        selected_columns = ["time", column]
+        if flag_column in patient.columns:
+            selected_columns.append(flag_column)
+        selected = patient.loc[
+            patient[column].notna(), selected_columns
+        ].copy()
         if positive:
             selected = selected.loc[selected[column] > 0]
         selected["VALUE"] = (
             np.exp(selected[column]) if exponentiate else selected[column]
         )
-        return selected.rename(columns={"time": "TIME"})[["TIME", "VALUE"]]
+        selected["INTERPOLATED"] = (
+            selected[flag_column].fillna(0).astype(bool)
+            if flag_column in selected
+            else False
+        )
+        selected["INTERPOLATION_FLAG_AVAILABLE"] = flag_column in selected
+        return selected.rename(columns={"time": "TIME"})[
+            [
+                "TIME",
+                "VALUE",
+                "INTERPOLATED",
+                "INTERPOLATION_FLAG_AVAILABLE",
+            ]
+        ]
 
     return {
         "tac_concentration": make_series("dv_tac", exponentiate=True),
@@ -447,27 +665,48 @@ def series_by_stage(
         series_key
     ].copy()
 
-    def mark_added(frame: pd.DataFrame, previous: pd.DataFrame) -> pd.DataFrame:
+    def mark_added(
+        frame: pd.DataFrame, previous: pd.DataFrame, *, use_interpolation_flag=False
+    ) -> pd.DataFrame:
         frame = frame.copy()
-        previous_times = set(previous["TIME"].round(6))
-        frame["ADDED"] = ~frame["TIME"].round(6).isin(previous_times)
+        flag_available = (
+            "INTERPOLATION_FLAG_AVAILABLE" in frame
+            and frame["INTERPOLATION_FLAG_AVAILABLE"].any()
+        )
+        if use_interpolation_flag and flag_available:
+            frame["ADDED"] = frame["INTERPOLATED"].fillna(False).astype(bool)
+        else:
+            previous_times = set(previous["TIME"].round(6))
+            frame["ADDED"] = ~frame["TIME"].round(6).isin(previous_times)
         return frame
 
     original["ADDED"] = False
+    original["INTERPOLATED"] = False
+    original["INTERPOLATION_FLAG_AVAILABLE"] = False
     return {
         "original": original,
         "merged": mark_added(after_merge, original),
-        "interpolated": mark_added(after_interpolation, after_merge),
+        "interpolated": mark_added(
+            after_interpolation, after_merge, use_interpolation_flag=True
+        ),
     }
 
 
 def original_figure(
-    patient_id: int, selected_series: list[str] | None, plot_type: str
+    patient_id: int,
+    selected_series: list[str] | None,
+    plot_type: str,
 ) -> go.Figure:
-    frames = original_patient_series(patient_id)
+    # A visão longitudinal original sempre mostra todo o acompanhamento. A
+    # ocorrência selecionada é usada apenas no histograma populacional.
+    frames = original_patient_series(patient_id, None)
+    processed_frames = processed_patient_series(
+        DATA["interpolated"], patient_id
+    )
     selected_series = selected_series or []
+    title = "Séries temporais originais"
     if not selected_series:
-        return empty_figure("Séries temporais originais", "Selecione uma série")
+        return empty_figure(title, "Selecione uma série")
 
     colors = {
         "tac_concentration": "#2563eb",
@@ -485,29 +724,240 @@ def original_figure(
     }
     figure = go.Figure()
     for series_key in selected_series:
-        if series_key not in frames or frames[series_key].empty:
+        if series_key not in frames:
             continue
         frame = frames[series_key]
+        if not frame.empty:
+            figure.add_trace(
+                go.Scatter(
+                    x=frame["TIME"],
+                    y=frame["VALUE"],
+                    mode=(
+                        "markers" if plot_type == "scatter" else "lines+markers"
+                    ),
+                    name=f"{SERIES[series_key]} — observado",
+                    marker={
+                        "size": 8,
+                        "color": colors[series_key],
+                        "opacity": 0.82,
+                    },
+                    hovertemplate=(
+                        f"{SERIES[series_key]} — observado"
+                        "<br>Tempo: %{x:.2f} h"
+                        "<br>Valor: %{y:.4g}<extra></extra>"
+                    ),
+                )
+            )
+        processed = processed_frames.get(series_key, pd.DataFrame())
+        if "INTERPOLATED" not in processed:
+            continue
+        interpolated = processed.loc[processed["INTERPOLATED"]]
+        if interpolated.empty:
+            continue
         figure.add_trace(
             go.Scatter(
-                x=frame["TIME"],
-                y=frame["VALUE"],
-                mode="markers" if plot_type == "scatter" else "lines+markers",
-                name=SERIES[series_key],
-                marker={"size": 8, "color": colors[series_key], "opacity": 0.82},
+                x=interpolated["TIME"],
+                y=interpolated["VALUE"],
+                mode="markers",
+                name=f"{SERIES[series_key]} — interpolado",
+                marker={
+                    "size": 11,
+                    "color": colors[series_key],
+                    "symbol": "x",
+                    "line": {"color": "#0f172a", "width": 1},
+                },
                 hovertemplate=(
-                    f"{SERIES[series_key]}<br>Tempo: %{{x:.2f}} h"
+                    f"{SERIES[series_key]} — interpolado"
+                    "<br>Tempo: %{x:.2f} h"
                     "<br>Valor: %{y:.4g}<extra></extra>"
                 ),
             )
         )
     if not figure.data:
-        return empty_figure("Séries temporais originais")
-    figure = style_figure(
-        figure, "Séries temporais originais", "Valor na unidade original"
-    )
+        return empty_figure(title)
+    figure = style_figure(figure, title, "Valor na unidade original")
     maximum_time = max(max(trace.x) for trace in figure.data)
     figure.update_xaxes(range=[0, maximum_time * 1.02 if maximum_time > 0 else 1])
+    return figure
+
+
+def population_count_histogram(series_key: str, occasion: int) -> go.Figure:
+    """Plot the distribution of patient measurement counts for one occasion."""
+    if series_key not in SERIES or int(occasion) not in OCCASIONS:
+        return empty_figure(
+            "Distribuição do número de medidas", "Selecione variável e ocorrência"
+        )
+    occasion = int(occasion)
+    counts = population_measure_counts(series_key, occasion)
+    maximum = int(counts["count"].max()) if not counts.empty else 0
+    figure = go.Figure(
+        go.Histogram(
+            x=counts["count"],
+            xbins={"start": -0.5, "end": maximum + 0.5, "size": 1},
+            marker={"color": "#2563eb", "line": {"color": "white", "width": 1}},
+            hovertemplate=(
+                "Número de medidas: %{x}<br>Pacientes: %{y}<extra></extra>"
+            ),
+        )
+    )
+    figure.update_layout(
+        title={
+            "text": (
+                f"Distribuição por paciente — {SERIES[series_key]} — "
+                f"ocorrência {occasion}"
+            ),
+            "x": 0.02,
+        },
+        template="plotly_white",
+        height=430,
+        margin={"l": 65, "r": 25, "t": 70, "b": 60},
+        bargap=0.08,
+        xaxis_title="Número de medidas originais por paciente",
+        yaxis_title="Número de pacientes",
+        showlegend=False,
+    )
+    figure.update_xaxes(dtick=1, rangemode="tozero")
+    figure.update_yaxes(dtick=1, rangemode="tozero")
+    return figure
+
+
+def experiment_lym_figure(
+    patient_id: int, experiment_key: str | None, plot_type: str
+) -> go.Figure:
+    """Plot the complete original LYM series with experiment predictions."""
+    if not experiment_key or experiment_key not in EXPERIMENTS:
+        return empty_figure(
+            "LYM original e previsto", "Selecione um experimento compatível"
+        )
+
+    original = original_patient_series(patient_id)["lymphocytes"]
+    figure = go.Figure()
+    if not original.empty:
+        figure.add_trace(
+            go.Scatter(
+                x=original["TIME"],
+                y=original["VALUE"],
+                mode="markers" if plot_type == "scatter" else "lines+markers",
+                name="LYM original",
+                marker={"size": 9, "color": "#2563eb"},
+                line={"color": "#2563eb", "width": 2},
+                hovertemplate=(
+                    "LYM original<br>Tempo: %{x:.2f} h"
+                    "<br>Valor: %{y:.4g}<extra></extra>"
+                ),
+            )
+        )
+
+    experiment = EXPERIMENTS[experiment_key]
+    metadata = json.loads(
+        (experiment / "metadata.json").read_text(encoding="utf-8")
+    )
+    target_series_path = experiment / "test_target_series.csv"
+    if target_series_path.exists():
+        target_series = pd.read_csv(target_series_path)
+        if "interpolated" in target_series.columns:
+            interpolated_targets = target_series.loc[
+                target_series["id"].eq(patient_id)
+                & target_series["interpolated"].fillna(False).astype(bool)
+            ].sort_values("time")
+            if not interpolated_targets.empty:
+                figure.add_trace(
+                    go.Scatter(
+                        x=interpolated_targets["time"],
+                        y=interpolated_targets["lym"],
+                        mode="markers",
+                        name="LYM interpolado (somente histórico)",
+                        marker={
+                            "size": 11,
+                            "symbol": "x",
+                            "color": "#dc2626",
+                        },
+                        hovertemplate=(
+                            "LYM interpolado — não usado como alvo"
+                            "<br>Tempo: %{x:.2f} h"
+                            "<br>Valor: %{y:.4g}<extra></extra>"
+                        ),
+                    )
+                )
+    colors = ["#dc2626", "#059669", "#7c3aed", "#d97706"]
+    prediction_count = 0
+    interpolated_targets_added = False
+    for color, model in zip(colors, metadata.get("models") or []):
+        prediction_path = experiment / model / "predictions.csv"
+        if not prediction_path.exists():
+            continue
+        predictions = pd.read_csv(prediction_path)
+        patient = predictions.loc[predictions["id"] == patient_id].sort_values("time")
+        if patient.empty:
+            continue
+        prediction_count += len(patient)
+        interpolation_status = (
+            patient["interpolated"].fillna(False).astype(bool)
+            if "interpolated" in patient
+            else pd.Series(False, index=patient.index)
+        )
+        if interpolation_status.any() and not interpolated_targets_added:
+            targets = patient.loc[interpolation_status]
+            figure.add_trace(
+                go.Scatter(
+                    x=targets["time"],
+                    y=targets["observed"],
+                    mode="markers",
+                    name="LYM interpolado usado como alvo",
+                    marker={"size": 11, "symbol": "x", "color": "#dc2626"},
+                    hovertemplate=(
+                        "LYM interpolado<br>Tempo: %{x:.2f} h"
+                        "<br>Valor: %{y:.4g}<extra></extra>"
+                    ),
+                )
+            )
+            interpolated_targets_added = True
+        for is_interpolated, suffix, symbol in (
+            (False, "alvo original", "diamond"),
+            (True, "alvo interpolado", "x"),
+        ):
+            selected = patient.loc[interpolation_status.eq(is_interpolated)]
+            if selected.empty:
+                continue
+            figure.add_trace(
+                go.Scatter(
+                    x=selected["time"],
+                    y=selected["predicted"],
+                    mode=(
+                        "markers" if plot_type == "scatter" else "lines+markers"
+                    ),
+                    name=(
+                        f"LYM previsto — {model.replace('_', ' ').title()} "
+                        f"({suffix})"
+                    ),
+                    marker={"size": 10, "symbol": symbol, "color": color},
+                    line={"color": color, "width": 2, "dash": "dash"},
+                    hovertemplate=(
+                        f"{model.replace('_', ' ').title()} — {suffix}"
+                        "<br>Tempo: %{x:.2f} h"
+                        "<br>LYM previsto: %{y:.4g}<extra></extra>"
+                    ),
+                )
+            )
+
+    if not figure.data:
+        return empty_figure("LYM original e previsto")
+    if prediction_count == 0:
+        figure.add_annotation(
+            text="Este paciente não pertence ao conjunto de teste do experimento",
+            x=0.5,
+            y=0.95,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            bgcolor="rgba(255,255,255,0.85)",
+        )
+    figure = style_figure(
+        figure,
+        f"LYM original e previsto — paciente {patient_id}",
+        "LYM",
+    )
+    figure.update_layout(legend_title_text="Série")
     return figure
 
 
@@ -533,7 +983,9 @@ def series_figure(
         if frame.empty:
             continue
         point_status = np.where(
-            frame["ADDED"], "Adicionado nesta etapa", "Já existente na etapa anterior"
+            frame["ADDED"],
+            "Interpolado" if stage == "interpolated" else "Adicionado nesta etapa",
+            "Observado/não interpolado",
         )
         figure.add_trace(
             go.Scatter(
@@ -561,7 +1013,11 @@ def series_figure(
                     x=added["TIME"],
                     y=added["VALUE"],
                     mode="markers",
-                    name=f"{STAGES[stage]} — pontos adicionados",
+                    name=(
+                        f"{STAGES[stage]} — pontos interpolados"
+                        if stage == "interpolated"
+                        else f"{STAGES[stage]} — pontos adicionados"
+                    ),
                     marker={
                         "size": 8,
                         "color": colors[stage],
@@ -569,7 +1025,8 @@ def series_figure(
                         "line": {"color": "#0f172a", "width": 1.5},
                     },
                     hovertemplate=(
-                        f"{STAGES[stage]} — adicionado"
+                        f"{STAGES[stage]} — "
+                        f"{'interpolado' if stage == 'interpolated' else 'adicionado'}"
                         "<br>Tempo: %{x:.2f} h"
                         "<br>Valor: %{y:.4g}<extra></extra>"
                     ),
@@ -630,9 +1087,47 @@ app.layout = html.Main(
     [
         html.H1("Séries temporais originais", style={"marginBottom": "4px"}),
         html.P(
-            "Visualização conjunta das medidas originais, sem merge ou interpolação.",
+            "Visualização longitudinal completa das medidas originais, com os "
+            "pontos interpolados destacados e sem filtro por ocorrência.",
             style={"color": "#475569", "marginTop": 0},
         ),
+        html.H2("Visão geral de todos os pacientes", style={"marginBottom": "4px"}),
+        html.P(
+            "Distribuição do número de medidas originais por paciente na variável e "
+            "ocorrência selecionadas. Pacientes sem medidas entram na contagem zero.",
+            style={"color": "#475569", "marginTop": 0},
+        ),
+        html.Label(
+            "Variável",
+            htmlFor="population-series-select",
+            style={"fontWeight": 600},
+        ),
+        dcc.Dropdown(
+            id="population-series-select",
+            options=[{"label": label, "value": key} for key, label in SERIES.items()],
+            value="lymphocytes",
+            clearable=False,
+            searchable=True,
+            style={"maxWidth": "520px", "marginTop": "6px"},
+        ),
+        html.Label(
+            "Ocorrência",
+            htmlFor="occasion-select",
+            style={"fontWeight": 600, "display": "block", "marginTop": "18px"},
+        ),
+        dcc.Dropdown(
+            id="occasion-select",
+            options=occasion_options(),
+            value=1,
+            clearable=False,
+            searchable=False,
+            style={"maxWidth": "520px", "marginTop": "6px"},
+        ),
+        html.Div(
+            dcc.Graph(id="population-count-histogram"),
+            style={**CARD_STYLE, "marginTop": "14px", "marginBottom": "36px"},
+        ),
+        html.H2("Visualização por paciente", style={"marginBottom": "14px"}),
         html.Label("Paciente", htmlFor="patient-select", style={"fontWeight": 600}),
         dcc.Dropdown(
             id="patient-select",
@@ -682,34 +1177,28 @@ app.layout = html.Main(
         html.Hr(
             style={"border": 0, "borderTop": "1px solid #cbd5e1", "margin": "42px 0"}
         ),
-        html.H1("Séries temporais processadas", style={"marginBottom": "4px"}),
+        html.H1("Previsões de LYM", style={"marginBottom": "4px"}),
         html.P(
-            "Comparação por variável entre dados originais, após o merge e após a interpolação.",
+            "Série original completa de LYM com as previsões do experimento selecionado.",
             style={"color": "#475569", "marginTop": 0},
         ),
-        html.P(
-            "Marcadores em forma de estrela destacam pontos acrescentados em relação "
-            "à etapa anterior.",
-            style={"color": "#475569", "marginTop": "-6px"},
+        html.Label(
+            "Experimento", htmlFor="study-select", style={"fontWeight": 600}
         ),
-        html.Label("Estudo", htmlFor="study-select", style={"fontWeight": 600}),
         dcc.Dropdown(
             id="study-select",
             options=[
-                {"label": "Pipeline atual", "value": "current"},
-                *[
-                    {"label": study_key, "value": study_key}
-                    for study_key in STUDY_SOURCES
-                ],
+                {"label": experiment_key, "value": experiment_key}
+                for experiment_key in EXPERIMENTS
             ],
-            value="current",
+            value=DEFAULT_EXPERIMENT,
             clearable=False,
             searchable=True,
             style={"marginTop": "6px"},
         ),
         html.Div(
             id="study-description",
-            children=study_description("current"),
+            children=study_description(DEFAULT_EXPERIMENT),
             style={
                 **CARD_STYLE,
                 "marginTop": "12px",
@@ -717,13 +1206,20 @@ app.layout = html.Main(
                 "color": "#334155",
             },
         ),
-        html.P(
-            "Os estudos históricos são reconstruídos com o código arquivado de cada "
-            "execução e as bases originais atuais; os Parquets processados históricos "
-            "não foram armazenados.",
-            style={"color": "#64748b", "fontSize": "0.9rem"},
+        html.Div(
+            id="test-patients-panel",
+            children=test_patients_panel(DEFAULT_EXPERIMENT),
+            style={
+                **CARD_STYLE,
+                "marginTop": "12px",
+                "lineHeight": "1.4",
+                "color": "#334155",
+            },
         ),
-        html.Div([series_panel(series_key) for series_key in SERIES]),
+        html.Div(
+            dcc.Graph(id="experiment-lym-graph"),
+            style={**CARD_STYLE, "marginTop": "14px"},
+        ),
     ],
     style={
         "fontFamily": "system-ui, -apple-system, sans-serif",
@@ -743,9 +1239,20 @@ app.layout = html.Main(
     Input("plot-type", "value"),
 )
 def update_original_graph(
-    patient_id: int, selected_series: list[str] | None, plot_type: str
+    patient_id: int,
+    selected_series: list[str] | None,
+    plot_type: str,
 ):
     return original_figure(int(patient_id), selected_series, plot_type)
+
+
+@app.callback(
+    Output("population-count-histogram", "figure"),
+    Input("population-series-select", "value"),
+    Input("occasion-select", "value"),
+)
+def update_population_count_histogram(series_key: str, occasion: int):
+    return population_count_histogram(series_key, occasion)
 
 
 @app.callback(Output("study-description", "children"), Input("study-select", "value"))
@@ -754,27 +1261,22 @@ def update_study_description(study_key: str):
 
 
 @app.callback(
-    Output({"type": "series-graph", "series": MATCH}, "figure"),
-    Input("patient-select", "value"),
-    Input({"type": "stage-select", "series": MATCH}, "value"),
-    Input("plot-type", "value"),
-    Input("study-select", "value"),
-    State({"type": "stage-select", "series": MATCH}, "id"),
+    Output("test-patients-panel", "children"), Input("study-select", "value")
 )
-def update_series_graph(
-    patient_id: int,
-    selected_stages: list[str] | None,
-    plot_type: str,
-    study_key: str,
-    component_id: dict[str, str],
+def update_test_patients_panel(study_key: str | None):
+    return test_patients_panel(study_key)
+
+
+@app.callback(
+    Output("experiment-lym-graph", "figure"),
+    Input("patient-select", "value"),
+    Input("study-select", "value"),
+    Input("plot-type", "value"),
+)
+def update_experiment_lym_graph(
+    patient_id: int, experiment_key: str | None, plot_type: str
 ):
-    return series_figure(
-        int(patient_id),
-        component_id["series"],
-        selected_stages,
-        plot_type,
-        study_key,
-    )
+    return experiment_lym_figure(int(patient_id), experiment_key, plot_type)
 
 
 @app.callback(Output("patient-summary", "children"), Input("patient-select", "value"))

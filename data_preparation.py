@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import pandas as pd
 import numpy as np
+import argparse
 
 from methods.interpolation import METHODS, SERIES_VALIDITY_RULES
 
@@ -20,6 +21,68 @@ INTERPOLATION_METHODS = {
     "m155": "temporal_regression_quadratic",
     "wgt": "linear",
 }
+
+# Variáveis que não representam uma série temporal. Se houver ao menos uma
+# observação para o paciente, o valor é propagado para todos os seus registros.
+NON_TEMPORAL_COLUMNS = [
+    "age",
+    "sex",
+    "hgt",
+    "dty",
+    "ifc",
+    "dage",
+    "cisq",
+    "dyl",
+    "oifc",
+    "cmv",
+    "bkv",
+    "dm",
+]
+
+# Variáveis que não devem participar da seleção da amostra, da interpolação
+# nem ser oferecidas aos modelos.
+EXCLUDED_VARIABLE_COLUMNS = ["ii", "cmt", "tad", "gfc"]
+INTERPOLATION_FLAG_PREFIX = "int_fg_"
+
+
+def propagate_non_temporal_columns(df):
+    """Propaga variáveis não temporais para todos os registros do paciente."""
+    df = df.copy()
+    columns = [column for column in NON_TEMPORAL_COLUMNS if column in df.columns]
+    if columns:
+        df[columns] = df.groupby("id", dropna=False)[columns].transform(
+            lambda series: series.ffill().bfill()
+        )
+    return df
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--merge", type=str, default="hard")
+    parser.add_argument(
+        "--occ",
+        type=int,
+        nargs="+",
+        default=[1],
+        help="Uma ou mais ocasiões mantidas antes do merge (padrão: 1)",
+    )
+    parser.add_argument(
+        "--var-mode",
+        choices=["all", "time-series"],
+        default="all",
+        help="Define quais variáveis determinam a elegibilidade dos pacientes",
+    )
+    parser.add_argument(
+        "--interpolation",
+        type=int,
+        choices=[0, 1],
+        default=0,
+        help="Aplica (1) ou não aplica (0) interpolação antes da limpeza",
+    )
+
+    args = parser.parse_args(argv)
+
+    return args
 
 
 def normalizar_colunas(df):
@@ -48,7 +111,7 @@ def normalizar_colunas(df):
 
 def read_data():
 
-    print("\n[1/6] Lendo bases de dados...")
+    print("\n[1/5] Lendo bases de dados...")
 
     lr_input_df = (
         normalizar_colunas(pd.read_parquet("data/lr_input.parquet"))
@@ -94,16 +157,20 @@ def read_data():
 # ---------------------------------------------------------
 
 
-def select_occ5(data, occ=1):
-    """Exclui a ocasião 5 antes de qualquer merge, preenchimento ou interpolação."""
+def select_occ5(data, occ=(1,)):
+    """Mantém as ocasiões selecionadas antes do merge e demais tratamentos."""
     if "occ" not in data.columns:
-        raise ValueError("Coluna occ obrigatória para excluir OCC = 5")
-    return data.loc[pd.to_numeric(data["occ"], errors="raise") == occ].copy()
+        raise ValueError("Coluna occ obrigatória para selecionar ocasiões")
+    occasions = [occ] if np.isscalar(occ) else list(occ)
+    if not occasions:
+        raise ValueError("Informe ao menos uma ocasião")
+    numeric_occ = pd.to_numeric(data["occ"], errors="raise")
+    return data.loc[numeric_occ.isin(occasions)].copy()
 
 
 def soft_merge_db(lr_input_df, mpa_df, tacrolimus_df, occ):
 
-    print("\n[2/6] Realizando merge das bases...")
+    print("\n[2/5] Realizando merge das bases...")
 
     print("  Associando dados de Tacrolimus...")
 
@@ -142,7 +209,7 @@ def soft_merge_db(lr_input_df, mpa_df, tacrolimus_df, occ):
 
 def merge_db(lr_input_df, mpa_df, tacrolimus_df, occ):
 
-    print("\n[2/6] Realizando merge das bases...")
+    print("\n[2/5] Realizando merge das bases...")
 
     print("  Associando dados de Tacrolimus...")
 
@@ -182,14 +249,17 @@ def merge_db(lr_input_df, mpa_df, tacrolimus_df, occ):
 
 def translating_flags(merged_df):
 
-    print("\n[3/6] Tratando flags e valores ausentes...")
+    print("\n[3/5] Tratando flags e valores ausentes...")
+
+    # Renomeando Tacrolimus
+    merged_df = merged_df.rename(columns={"amt": "amt_tac", "dv": "dv_tac"})
 
     # Valores antes do tratamento
-    print(f"  NaNs em dv (trac) antes: {merged_df['dv'].isna().sum()}")
+    print(f"  NaNs em dv_tac antes: {merged_df['dv_tac'].isna().sum()}")
     print(f"  NaNs em dv_map antes: {merged_df['dv_map'].isna().sum()}")
 
     # Colocando NaN com base nas colunas de labels
-    merged_df.loc[merged_df["mdv"] == 1, "dv"] = np.nan
+    merged_df.loc[merged_df["mdv"] == 1, "dv_tac"] = np.nan
     merged_df.loc[merged_df["mdv_map"] == 1, "dv_map"] = np.nan
 
     merged_df.loc[merged_df["lym"] == 9999, "lym"] = np.nan
@@ -199,33 +269,15 @@ def translating_flags(merged_df):
     merged_df.loc[merged_df["ifc"] == 9999, "ifc"] = np.nan
     merged_df.loc[merged_df["m155"] == 9999, "m155"] = np.nan
 
-    # Dose ausente = 0
-    merged_df["amt_map"] = merged_df["amt_map"].fillna(0)
-    merged_df["amt"] = merged_df["amt"].fillna(0)
-
-    # Removendo colunas de flags
-    merged_df = merged_df.drop(columns=["mdv", "mdv_map", "dylc"])
-
-    # Renomeando Tacrolimus
-    merged_df = merged_df.rename(columns={"amt": "amt_tac", "dv": "dv_tac"})
-
-    # Dados estáticos por paciente
-    colunas_estaticas = [
-        "age",
-        "sex",
-        "hgt",
-        "dty",
-        "dage",
-        "cisq",
-        "dyl",
-        "dm",
-    ]
-
-    print("  Propagando dados estáticos dentro de cada paciente...")
-
-    merged_df[colunas_estaticas] = merged_df.groupby("id")[colunas_estaticas].transform(
-        lambda x: x.ffill().bfill()
+    # Removendo flags e variáveis administrativas que não entram na análise.
+    merged_df = merged_df.drop(
+        columns=["mdv", "mdv_map", "dylc", *EXCLUDED_VARIABLE_COLUMNS],
+        errors="ignore",
     )
+
+    print("  Propagando dados não temporais dentro de cada paciente...")
+
+    merged_df = propagate_non_temporal_columns(merged_df)
 
     print("  Tratamento das flags concluído.")
 
@@ -238,8 +290,9 @@ def translating_flags(merged_df):
 
 
 def _interpolate_patient_series(patient, column, method_name):
-    """Interpola lacunas internas e completa bordas pelo valor mais próximo."""
+    """Interpola somente lacunas estritamente internas à série observada."""
     result = pd.to_numeric(patient[column], errors="coerce").copy()
+    inter_flag = pd.Series(0, index=result.index, dtype="int8")
     times = pd.to_numeric(patient["time"], errors="coerce")
     observed = (
         pd.DataFrame({"time": times, "value": result})
@@ -250,33 +303,31 @@ def _interpolate_patient_series(patient, column, method_name):
         observed = observed.loc[observed["value"] > 0]
     observed = observed.groupby("time", as_index=False)["value"].mean()
 
-    if observed.empty:
-        return result
+    minimum_observations = 3 if method_name == "temporal_regression_quadratic" else 2
+    if len(observed) < minimum_observations:
+        return result, inter_flag
 
     x = observed["time"].to_numpy(dtype=float)
     y = observed["value"].to_numpy(dtype=float)
-    valid_missing = result.isna() & times.notna()
-    result.loc[valid_missing & times.le(float(x.min()))] = y[0]
-    result.loc[valid_missing & times.ge(float(x.max()))] = y[-1]
-
-    minimum_observations = 3 if method_name == "temporal_regression_quadratic" else 2
-    if len(observed) < minimum_observations:
-        return result
 
     estimator = METHODS[method_name]
     internal_missing = (
-        result.isna() & times.notna() & times.between(float(x.min()), float(x.max()))
+        result.isna()
+        & times.notna()
+        & times.gt(float(x.min()))
+        & times.lt(float(x.max()))
     )
     for index in patient.index[internal_missing]:
         predicted = estimator(x, y, float(times.loc[index]))
         if np.isfinite(predicted):
             result.loc[index] = predicted
-    return result
+            inter_flag.loc[index] = 1
+    return result, inter_flag
 
 
 def ts_interpolation(df_final):
 
-    print("\n[4/6] Interpolando séries temporais...")
+    print("\n[4/5] Interpolando séries temporais...")
 
     missing_columns = sorted(set(INTERPOLATION_METHODS) - set(df_final.columns))
     if missing_columns:
@@ -291,53 +342,22 @@ def ts_interpolation(df_final):
 
     for coluna, metodo in INTERPOLATION_METHODS.items():
         interpolated = pd.to_numeric(df_final[coluna], errors="coerce").copy()
+        flag_name = INTERPOLATION_FLAG_PREFIX + coluna
+        inter_flag = pd.Series(0, index=interpolated.index, dtype="int8")
         for indices in df_final.groupby("id", sort=False).groups.values():
             patient = df_final.loc[indices]
-            interpolated.loc[indices] = _interpolate_patient_series(
+            patient_values, patient_flags = _interpolate_patient_series(
                 patient, coluna, metodo
             )
+            interpolated.loc[indices] = patient_values
+            inter_flag.loc[indices] = patient_flags
         df_final[coluna] = interpolated
+        df_final[flag_name] = inter_flag
 
     print("  NaNs após interpolação:")
 
     for coluna, metodo in INTERPOLATION_METHODS.items():
         print(f"    {coluna} ({metodo}): {df_final[coluna].isna().sum()}")
-
-    # -----------------------------------------------------
-    # Pacientes sem nenhum dado de MPA
-    # -----------------------------------------------------
-
-    ids_sem_dv_map = df_final.groupby("id")["dv_map"].apply(lambda x: x.isna().all())
-
-    ids_sem_dv_map = ids_sem_dv_map[ids_sem_dv_map].index.to_list()
-
-    print(f"  Pacientes sem nenhum valor de dv_map: " f"{len(ids_sem_dv_map)}")
-
-    if ids_sem_dv_map:
-        print(f"    IDs: {ids_sem_dv_map}")
-
-    df_final = df_final[~df_final["id"].isin(ids_sem_dv_map)]
-
-    # -----------------------------------------------------
-    # Pacientes sem nenhum dado de Tacrolimus
-    # -----------------------------------------------------
-
-    ids_sem_dv_tac = df_final.groupby("id")["dv_tac"].apply(lambda x: x.isna().all())
-
-    ids_sem_dv_tac = ids_sem_dv_tac[ids_sem_dv_tac].index.to_list()
-
-    print(f"  Pacientes sem nenhum valor de dv_tac: " f"{len(ids_sem_dv_tac)}")
-
-    if ids_sem_dv_tac:
-        print(f"    IDs: {ids_sem_dv_tac}")
-
-    df_final = df_final[~df_final["id"].isin(ids_sem_dv_tac)]
-
-    print(
-        f"  Após remoção: "
-        f"{len(df_final)} linhas | "
-        f"{df_final['id'].nunique()} pacientes"
-    )
 
     return df_final
 
@@ -347,22 +367,64 @@ def ts_interpolation(df_final):
 # ---------------------------------------------------------
 
 
-def data_cleaning(final_df):
+def data_cleaning(final_df, var_mode="all"):
 
-    print("\n[5/6] Criando base limpa...")
+    print("\n[4/5] Criando base limpa...")
 
-    colunas_obrigatorias = ["m155", "ifc", "cisq", "dyl", "lym"]
+    missing_columns = sorted({"id", "cisq"} - set(final_df.columns))
+    if missing_columns:
+        raise ValueError(
+            "Colunas obrigatórias ausentes na limpeza: " f"{missing_columns}"
+        )
+
+    # A limpeza também garante a propagação. Isso evita NaNs parciais caso esta
+    # função seja chamada com dados que não passaram por translating_flags().
+    final_df = propagate_non_temporal_columns(final_df)
+
+    if var_mode not in {"all", "time-series"}:
+        raise ValueError("var_mode deve ser all ou time-series")
+
+    excluded = {
+        "id",
+        "time",
+        *(
+            column
+            for column in final_df.columns
+            if column.startswith(INTERPOLATION_FLAG_PREFIX)
+        ),
+    }
+    if var_mode == "time-series":
+        excluded.update(NON_TEMPORAL_COLUMNS)
+    colunas_medidas = [coluna for coluna in final_df.columns if coluna not in excluded]
 
     antes = len(final_df)
+    pacientes_antes = final_df["id"].nunique()
 
-    clean_df = final_df.dropna(subset=colunas_obrigatorias)
+    tem_medida_na_serie = final_df.groupby("id")[colunas_medidas].transform(
+        lambda serie: serie.notna().any()
+    )
+    manter_paciente = tem_medida_na_serie.all(axis=1)
+    clean_df = final_df.loc[manter_paciente].copy()
 
     depois = len(clean_df)
+    pacientes_depois = clean_df["id"].nunique()
 
     print(f"  Linhas antes: {antes}")
     print(f"  Linhas depois: {depois}")
     print(f"  Linhas removidas: {antes - depois}")
-    print(f"  Pacientes restantes: " f"{clean_df['id'].nunique()}")
+    print(
+        "  Critério de elegibilidade: "
+        + (
+            "somente séries temporais e alvo"
+            if var_mode == "time-series"
+            else "todas as variáveis"
+        )
+    )
+    print(
+        "  Pacientes removidos sem nenhuma medida em pelo menos uma variável: "
+        f"{pacientes_antes - pacientes_depois}"
+    )
+    print(f"  Pacientes restantes: {pacientes_depois}")
 
     return clean_df
 
@@ -400,20 +462,25 @@ def dataset_metadata(df):
     }
 
 
-def main(merge="soft", occ=1):
-
+def main(argv=None):
+    args = parse_args(argv)
     print("=" * 60)
     print("INICIANDO PREPARAÇÃO DOS DADOS")
     print("=" * 60)
 
     lr_input_df, mpa_df, tacrolimus_df = read_data()
 
+    raw_frames = (lr_input_df, mpa_df, tacrolimus_df)
+    removed_by_source = {
+        name: len(frame) - len(select_occ5(frame, args.occ))
+        for name, frame in zip(("lr_input", "mpa", "tacrolimus"), raw_frames)
+    }
     lr_input_df, mpa_df, tacrolimus_df = (
-        select_occ5(frame, occ) for frame in (lr_input_df, mpa_df, tacrolimus_df)
+        select_occ5(frame, args.occ) for frame in raw_frames
     )
 
     metadata = {
-        "versao": 3,
+        "versao": 4,
         "gerado_em_utc": datetime.now(timezone.utc).isoformat(),
         "definicao_missing": (
             "Valores reconhecidos por pandas.isna (NaN, None, NA, NaT). "
@@ -428,61 +495,65 @@ def main(merge="soft", occ=1):
         },
         "etapas": {},
         "interpolacao": {
-            "metodos_por_serie": INTERPOLATION_METHODS,
-            "escopo": "Por paciente, usando o tempo real",
-            "tratamento_das_bordas": (
-                "Lacunas antes/depois da faixa observada recebem o valor "
-                "observado mais próximo; pacientes sem observações permanecem ausentes"
+            "aplicada": bool(args.interpolation),
+            "metodos_por_serie": INTERPOLATION_METHODS if args.interpolation else {},
+            "flags_prefixo": (
+                INTERPOLATION_FLAG_PREFIX if args.interpolation else None
             ),
-            "origem": (
-                "studies/interpolation/study_20261021T153733Z_patient_loocv/"
-                "best_methods.csv"
+            "politica_extremidades": (
+                "não preencher; somente pontos estritamente internos"
+                if args.interpolation
+                else None
             ),
         },
+        "modo_variaveis": args.var_mode,
     }
 
-    metadata["exclusao_occ5"] = {
-        "momento": "Antes do merge, preenchimento e interpolação",
-        "linhas_removidas": {
-            name: len(frame) - len(select_occ5(frame))
-            for name, frame in (
-                ("lr_input", lr_input_df),
-                ("mpa", mpa_df),
-                ("tacrolimus", tacrolimus_df),
-            )
-        },
+    metadata["selecao_occ"] = {
+        "momento": "Antes do merge e do tratamento de flags",
+        "ocasioes_mantidas": args.occ,
+        "linhas_removidas": removed_by_source,
     }
 
-    if merge == "soft":
-        merged_df = soft_merge_db(lr_input_df, mpa_df, tacrolimus_df, occ)
+    if args.merge == "soft":
+        merged_df = soft_merge_db(lr_input_df, mpa_df, tacrolimus_df, args.occ)
+
+    elif args.merge == "hard":
+        merged_df = merge_db(lr_input_df, mpa_df, tacrolimus_df, args.occ)
 
     else:
-        merged_df = soft_merge_db(lr_input_df, mpa_df, tacrolimus_df, occ)
+        raise ValueError(f"Invalid merge method: '{args.merge}'")
 
     metadata["etapas"]["apos_merge"] = dataset_metadata(merged_df)
 
-    treated_df = translating_flags(merged_df)
+    final_df = translating_flags(merged_df)
 
-    metadata["etapas"]["apos_flags_e_preenchimento"] = dataset_metadata(treated_df)
+    metadata["etapas"]["apos_flags_e_preenchimento"] = dataset_metadata(final_df)
 
-    final_df = ts_interpolation(treated_df)
+    if args.interpolation:
+        final_df = ts_interpolation(final_df)
+        metadata["etapas"]["apos_interpolacao"] = dataset_metadata(final_df)
 
-    clean_df = data_cleaning(final_df)
+    clean_df = data_cleaning(final_df, args.var_mode)
     metadata["depois"] = {
         "full_processed": dataset_metadata(final_df),
         "clean_processed": dataset_metadata(clean_df),
     }
-    metadata["comparacao_com_lr_input"] = {
-        name: {
-            "linhas_removidas": len(lr_input_df) - len(df),
-            "pacientes_removidos": int(
-                lr_input_df.loc[~lr_input_df["id"].isin(df["id"]), "id"].nunique()
-            ),
+    reference_ids = set(lr_input_df["id"].dropna().unique())
+    metadata["comparacao_com_lr_input"] = {}
+    for name, frame in (
+        ("full_processed", final_df),
+        ("clean_processed", clean_df),
+    ):
+        output_ids = set(frame["id"].dropna().unique())
+        metadata["comparacao_com_lr_input"][name] = {
+            "linhas_entrada_referencia": len(lr_input_df),
+            "linhas_saida": len(frame),
+            "pacientes_ausentes_na_saida": len(reference_ids - output_ids),
+            "pacientes_adicionados_na_saida": len(output_ids - reference_ids),
         }
-        for name, df in (("full_processed", final_df), ("clean_processed", clean_df))
-    }
 
-    print("\n[6/6] Salvando bases em formato Parquet...")
+    print("\n[5/5] Salvando bases em formato Parquet...")
 
     final_df.to_parquet("data/full_processed.parquet", index=False)
 

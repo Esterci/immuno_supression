@@ -1,0 +1,14 @@
+{
+  "rmse": 1.5258549412037052,
+  "mae": 1.0179738636550395,
+  "r2": 0.9716902349646076,
+  "mape_percent_nonzero": 22.223204777479395,
+  "mape_excluded_zeros": 0,
+  "rmse_patient_sd": 0.8966508922164012,
+  "mae_patient_sd": 0.628671228833932,
+  "mape_percent_nonzero_patient_sd": 53.92478538163142,
+  "metric_patient_count": 11,
+  "model": "adaboost",
+  "cv_r2": 0.9919826293484348,
+  "fit_seconds": 6.1090683239999635
+}

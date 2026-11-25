@@ -31,23 +31,63 @@ def patient_metrics(predictions):
     return pd.DataFrame(records).sort_values(["rmse", "id"]).reset_index(drop=True)
 
 
-def temporal_plot(predictions, metrics, model, output):
+def temporal_plot(predictions, original_series, metrics, model, output):
     best = metrics.iloc[0]
     worst = metrics.iloc[-1]
     selected = [("Melhor", best), ("Pior", worst)]
     fig, axes = plt.subplots(2, 1, figsize=(12, 8), constrained_layout=True)
     for axis, (label, result) in zip(axes, selected):
         patient = predictions[predictions["id"] == result["id"]].sort_values("time")
-        axis.plot(
-            patient["time"], patient["observed"], "o-", label="LYM real", linewidth=2
+        original = original_series[
+            original_series["id"] == result["id"]
+        ].sort_values("time")
+        original_interpolated = (
+            original["interpolated"].fillna(False).astype(bool)
+            if "interpolated" in original
+            else pd.Series(False, index=original.index)
         )
+        measured = original.loc[~original_interpolated]
+        filled = original.loc[original_interpolated]
         axis.plot(
-            patient["time"],
-            patient["predicted"],
-            "s--",
-            label="LYM previsto",
-            linewidth=2,
+            measured["time"],
+            measured["lym"],
+            "o-",
+            label="LYM observado originalmente",
+            linewidth=1.5,
+            color="tab:blue",
         )
+        if not filled.empty:
+            axis.scatter(
+                filled["time"],
+                filled["lym"],
+                marker="X",
+                s=65,
+                label="LYM interpolado",
+                color="tab:red",
+                zorder=4,
+            )
+        prediction_interpolated = (
+            patient["interpolated"].fillna(False).astype(bool)
+            if "interpolated" in patient
+            else pd.Series(False, index=patient.index)
+        )
+        for selected, label_suffix, marker in (
+            (~prediction_interpolated, "alvo original", "s"),
+            (prediction_interpolated, "alvo interpolado", "X"),
+        ):
+            points = patient.loc[selected]
+            if points.empty:
+                continue
+            axis.plot(
+                points["time"],
+                points["predicted"],
+                marker=marker,
+                linestyle="--",
+                label=f"LYM previsto ({label_suffix})",
+                linewidth=2,
+                color="tab:orange",
+                zorder=3,
+            )
         axis.set_title(
             f"{label} paciente — ID {result['id']:g} | "
             f"RMSE={result['rmse']:.3f} | MAE={result['mae']:.3f} | n={int(result['observations'])}"
@@ -56,7 +96,11 @@ def temporal_plot(predictions, metrics, model, output):
         axis.set_ylabel("LYM")
         axis.grid(alpha=0.25)
         axis.legend()
-    fig.suptitle(f"Evolução temporal — {model.replace('_', ' ').title()}", fontsize=14)
+    fig.suptitle(
+        f"Evolução temporal das medidas previsíveis — "
+        f"{model.replace('_', ' ').title()}",
+        fontsize=14,
+    )
     fig.savefig(output, dpi=180, bbox_inches="tight")
     plt.close(fig)
     return best, worst
@@ -69,6 +113,17 @@ def analyze(experiment, require_complete=True):
         raise ValueError(f"Experimento não está completo: {metadata.get('status')}")
     output = experiment / "patient_temporal_analysis"
     output.mkdir(exist_ok=True)
+    original_series_path = experiment / "test_target_series.csv"
+    if not original_series_path.exists():
+        raise FileNotFoundError(
+            "Série original de teste ausente: " f"{original_series_path}"
+        )
+    original_series = pd.read_csv(original_series_path)
+    required_original = {"id", "time", "lym"}
+    if missing := required_original - set(original_series.columns):
+        raise ValueError(
+            "Colunas ausentes em test_target_series.csv: " f"{sorted(missing)}"
+        )
     summary = []
     for model in metadata["models"]:
         predictions = pd.read_csv(experiment / model / "predictions.csv")
@@ -81,6 +136,7 @@ def analyze(experiment, require_complete=True):
         metrics.to_csv(output / f"{model}_metrics_by_patient.csv", index=False)
         best, worst = temporal_plot(
             predictions,
+            original_series,
             metrics,
             model,
             output / f"{model}_best_worst_patients.png",
@@ -101,6 +157,7 @@ def analyze(experiment, require_complete=True):
         "best_definition": "menor RMSE",
         "worst_definition": "maior RMSE",
         "models": list(metadata["models"]),
+        "original_series": str(original_series_path),
         "output": str(output),
     }
     (output / "metadata.json").write_text(

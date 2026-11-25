@@ -1,6 +1,7 @@
 """Features temporais, modelos e buscas extraídos de ml_models_study.ipynb."""
 
 import numpy as np
+from data_preparation import EXCLUDED_VARIABLE_COLUMNS, INTERPOLATION_FLAG_PREFIX
 from sklearn.ensemble import (
     AdaBoostRegressor,
     GradientBoostingRegressor,
@@ -54,12 +55,24 @@ def prepare_features(data, n_lags=3, normalization="all", var_mode="all"):
     # O valor inicial só pode ser usado em observações posteriores.
     data = data.loc[data.groupby("id").cumcount() > 0]
     # Uma observação sem LYM atual não pode ser usada como exemplo supervisionado.
+    # LYM interpolado pode compor os lags, mas nunca pode ser o alvo atual.
+    real_target = data["lym"].notna()
+    target_flag = f"{INTERPOLATION_FLAG_PREFIX}lym"
+    if target_flag in data.columns:
+        real_target &= ~data[target_flag].fillna(0).astype(bool)
+    data = data.loc[real_target]
     # No modo temporal, não exigimos nenhum atributo clínico; exigimos somente o
     # alvo atual e o histórico necessário para a quantidade de lags escolhida.
     data = data.dropna(subset=["lym", *lag_columns]).reset_index(drop=True)
     if data.empty:
         raise ValueError("Nenhuma linha restante após criação dos lags")
-    X = data.drop(columns=["id", "lym", *TEMPORAL_COLUMNS])
+    X = data.drop(
+        columns=["id", "lym", *TEMPORAL_COLUMNS, *EXCLUDED_VARIABLE_COLUMNS],
+        errors="ignore",
+    )
+    X = X.loc[
+        :, ~X.columns.str.startswith(INTERPOLATION_FLAG_PREFIX)
+    ]
     if var_mode == "time-series":
         X = X[["time", *lag_columns]]
     y = data["lym"]

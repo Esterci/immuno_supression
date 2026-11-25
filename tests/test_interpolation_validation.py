@@ -76,6 +76,29 @@ class InterpolationValidationTest(unittest.TestCase):
         self.assertEqual(eligibility.loc[0, "eligible_exams_per_method"], 3)
         self.assertNotIn(0.0, predictions.observed_original.to_list())
 
+    def test_mape_uses_original_scale_and_excludes_observed_zero(self):
+        predictions = pd.DataFrame(
+            {
+                "series": ["x", "x", "x"],
+                "method": ["m", "m", "m"],
+                "id": [1, 1, 2],
+                "error": [0.1, 0.2, 0.3],
+                "absolute_error": [0.1, 0.2, 0.3],
+                "squared_error": [0.01, 0.04, 0.09],
+                "ape_percent_original": [10.0, np.nan, 30.0],
+            }
+        )
+
+        patient, macro = calculate_metrics(predictions)
+
+        self.assertEqual(macro.loc[0, "mape_percent"], 20.0)
+        self.assertEqual(macro.loc[0, "mape_exams"], 2)
+        self.assertEqual(macro.loc[0, "mape_patients"], 2)
+        self.assertAlmostEqual(
+            macro.loc[0, "patient_mape_percent_sd"], np.sqrt(200.0)
+        )
+        self.assertIn("mape_percent_sd", patient.columns)
+
 
 if __name__ == "__main__":
     unittest.main()

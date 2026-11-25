@@ -18,10 +18,11 @@ def write_json(path, data):
     )
 
 
-def regression_metrics(y, prediction):
+def regression_metrics(y, prediction, groups=None):
     y = np.asarray(y)
+    prediction = np.asarray(prediction)
     nonzero = y != 0
-    return {
+    metrics = {
         "rmse": float(np.sqrt(mean_squared_error(y, prediction))),
         "mae": float(mean_absolute_error(y, prediction)),
         "r2": float(r2_score(y, prediction)) if len(y) > 1 and np.var(y) > 0 else None,
@@ -34,19 +35,89 @@ def regression_metrics(y, prediction):
         ),
         "mape_excluded_zeros": int((~nonzero).sum()),
     }
+    # Repeated measurements from the same patient are not independent.  Report
+    # dispersion across patient-level metrics, while retaining the pooled
+    # (per-observation) estimates above for backwards compatibility.
+    if groups is None:
+        groups = np.arange(len(y))
+    groups = np.asarray(groups)
+    if len(groups) != len(y):
+        raise ValueError("groups must have the same length as y")
+
+    by_group = []
+    for group in pd.unique(groups):
+        selected = groups == group
+        group_y = y[selected]
+        group_prediction = prediction[selected]
+        group_nonzero = group_y != 0
+        by_group.append(
+            {
+                "rmse": float(np.sqrt(mean_squared_error(group_y, group_prediction))),
+                "mae": float(mean_absolute_error(group_y, group_prediction)),
+                "mape_percent_nonzero": (
+                    float(
+                        100
+                        * np.mean(
+                            np.abs(
+                                (group_y[group_nonzero]
+                                - group_prediction[group_nonzero])
+                                / group_y[group_nonzero]
+                            )
+                        )
+                    )
+                    if group_nonzero.any()
+                    else np.nan
+                ),
+            }
+        )
+    patient_metrics = pd.DataFrame(by_group)
+    for metric in ("rmse", "mae", "mape_percent_nonzero"):
+        values = patient_metrics[metric].dropna()
+        metrics[f"{metric}_patient_sd"] = (
+            float(values.std(ddof=1)) if len(values) > 1 else None
+        )
+    metrics["metric_patient_count"] = int(len(patient_metrics))
+    return metrics
 
 
-def prediction_plot(y, prediction, path):
+def prediction_plot(y, prediction, path, interpolated=None):
+    y = np.asarray(y)
+    prediction = np.asarray(prediction)
+    if interpolated is None:
+        interpolated = np.zeros(len(y), dtype=bool)
+    interpolated = np.asarray(interpolated, dtype=bool)
+    if len(interpolated) != len(y):
+        raise ValueError("interpolated must have the same length as y")
+
     fig, axes = plt.subplots(1, 2, figsize=(11, 4))
-    axes[0].scatter(y, prediction, alpha=0.5, s=16)
+    styles = (
+        (~interpolated, "Observado originalmente", "#2563eb", "o"),
+        (interpolated, "Alvo interpolado", "#dc2626", "X"),
+    )
+    residual = y - prediction
+    for selected, label, color, marker in styles:
+        if not selected.any():
+            continue
+        axes[0].scatter(
+            y[selected], prediction[selected], alpha=0.65, s=28,
+            color=color, marker=marker, label=label,
+        )
+        axes[1].scatter(
+            prediction[selected], residual[selected], alpha=0.65, s=28,
+            color=color, marker=marker, label=label,
+        )
     low, high = min(min(y), min(prediction)), max(max(y), max(prediction))
     axes[0].plot([low, high], [low, high], "--", color="black")
     axes[0].set(
-        xlabel="LYM observado", ylabel="LYM previsto", title="Pacientes de teste"
+        xlabel="LYM observado",
+        ylabel="LYM previsto",
+        title="Medidas previsíveis dos pacientes de teste",
     )
-    axes[1].scatter(prediction, np.asarray(y) - prediction, alpha=0.5, s=16)
     axes[1].axhline(0, color="black", linestyle="--")
     axes[1].set(xlabel="LYM previsto", ylabel="Resíduo")
+    if interpolated.any():
+        axes[0].legend()
+        axes[1].legend()
     fig.tight_layout()
     fig.savefig(path, dpi=160)
     plt.close(fig)
@@ -157,9 +228,37 @@ def summarize(results, output):
     table.to_csv(output / "results.csv", index=False)
     print("\nResultados no conjunto de teste:")
     print(table.to_string(index=False))
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.bar(table["model"], table["rmse"])
-    ax.set(ylabel="RMSE de teste", title="Comparação dos modelos")
-    fig.tight_layout()
-    fig.savefig(output / "model_comparison.png", dpi=160)
-    plt.close(fig)
+    comparisons = (
+        ("rmse", "rmse_patient_sd", "RMSE", "%.3f", "RMSE de teste"),
+        ("mae", "mae_patient_sd", "MAE", "%.3f", "MAE de teste"),
+        (
+            "mape_percent_nonzero",
+            "mape_percent_nonzero_patient_sd",
+            "MAPE",
+            "%.2f%%",
+            "Erro percentual absoluto médio (MAPE, %)",
+        ),
+    )
+    for metric, sd_metric, label, value_format, y_label in comparisons:
+        comparison = table.dropna(subset=[metric])
+        fig, ax = plt.subplots(figsize=(8, 4.5))
+        errors = comparison[sd_metric].fillna(0) if sd_metric in comparison else None
+        bars = ax.bar(
+            comparison["model"],
+            comparison[metric],
+            yerr=errors,
+            capsize=5,
+        )
+        ax.bar_label(bars, fmt=value_format, padding=3)
+        ax.set(
+            ylabel=y_label,
+            title=(
+                f"Comparação dos modelos por {label} — medidas previsíveis\n"
+                "Barras de erro: ±1 DP entre pacientes"
+            ),
+        )
+        ax.grid(axis="y", alpha=0.25)
+        fig.tight_layout()
+        filename = "mape" if metric == "mape_percent_nonzero" else metric
+        fig.savefig(output / f"model_comparison_{filename}.png", dpi=160)
+        plt.close(fig)
